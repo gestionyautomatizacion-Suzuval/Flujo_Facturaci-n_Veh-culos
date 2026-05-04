@@ -1,0 +1,3 @@
+ALTER TABLE negocios ADD COLUMN IF NOT EXISTS chasis TEXT;
+ALTER TABLE negocios ADD COLUMN IF NOT EXISTS cod_modelo_vehiculo TEXT;
+ALTER TABLE negocios ADD COLUMN IF NOT EXISTS ano_facturacion TEXT;
