@@ -1085,7 +1085,7 @@ export default function CarpetaClient({ negocio }: Props) {
     if (replaceInputRef.current) replaceInputRef.current.value = "";
   };
 
-  const handleSpecialUpload = async (e: React.ChangeEvent<HTMLInputElement>, tipo: 'Nota de Venta' | 'Carnet Identidad Cliente' | 'Aporte Marca Z126' | 'Carta Mutuo Crédito' | 'Retoma Auto Usado' | 'RNVM' | 'MPP' | 'PEP_PERSONA' | 'PEP_EMPRESA', setter: (v: string | null) => void, inputRef: React.RefObject<HTMLInputElement | null>) => {
+  const handleSpecialUpload = async (e: React.ChangeEvent<HTMLInputElement>, tipo: 'Nota de Venta' | 'Carnet Identidad Cliente' | 'Aporte Marca Z126' | 'Carta Mutuo Crédito' | 'Retoma Auto Usado' | 'RNVM' | 'MPP' | 'PEP_PERSONA' | 'PEP_EMPRESA' | 'DJBF', setter: (v: string | null) => void, inputRef: React.RefObject<HTMLInputElement | null>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
     
