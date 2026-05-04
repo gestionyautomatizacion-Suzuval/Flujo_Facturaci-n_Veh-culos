@@ -4,7 +4,8 @@ import CarpetaClient from "./CarpetaClient";
 
 export default async function NegocioPage({ params }: { params: Promise<{ pedido_venta: string }> }) {
   const supabase = await createClient();
-  const { pedido_venta } = await params;
+  const { pedido_venta: raw_pedido_venta } = await params;
+  const pedido_venta = decodeURIComponent(raw_pedido_venta).trim();
   
   const { data: { user } } = await supabase.auth.getUser();
   console.log("User:", user?.id);
