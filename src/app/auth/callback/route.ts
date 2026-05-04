@@ -19,9 +19,12 @@ export async function GET(request: Request) {
         return NextResponse.redirect(`${origin}/login?error=Solo+se+permiten+correos+de+Suzuval`)
       }
       return NextResponse.redirect(`${origin}${next}`)
+    } else {
+      // Return exact error message
+      return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent('Error de autenticación: ' + error.message)}`)
     }
   }
 
   // return the user to an error page with instructions
-  return NextResponse.redirect(`${origin}/login?error=Ocurrió+un+error+al+autenticar`)
+  return NextResponse.redirect(`${origin}/login?error=Falta+codigo+de+autorizacion`)
 }
