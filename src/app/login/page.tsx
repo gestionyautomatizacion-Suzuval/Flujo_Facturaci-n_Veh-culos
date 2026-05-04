@@ -1,12 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { CarFront, AlertCircle } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
+function LoginContent() {
+  const searchParams = useSearchParams();
+  const urlError = searchParams.get("error");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  useEffect(() => {
+    if (urlError) {
+      setErrorMsg(urlError);
+    }
+  }, [urlError]);
 
   const handleGoogleLogin = async () => {
     try {
@@ -90,6 +99,13 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
-    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-slate-100 text-slate-500">Cargando...</div>}>
+      <LoginContent />
+    </Suspense>
   );
 }
