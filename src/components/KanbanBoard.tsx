@@ -67,11 +67,19 @@ export default function KanbanBoard({ initialData, isAdmin = false, cardSize = '
     e.stopPropagation();
     if (!window.confirm("¿Estás seguro de eliminar este negocio completamente? Esta acción no se puede deshacer.")) return;
     
-    const { error } = await supabase.from('negocios').delete().eq('pedido_venta', pedido_venta);
-    if (error) {
-      alert("Error al eliminar: " + error.message);
-    } else {
-      setData(prev => prev.filter(n => n.pedido_venta !== pedido_venta));
+    try {
+      const response = await fetch(`/api/admin/negocios?pedido_venta=${encodeURIComponent(pedido_venta)}`, {
+        method: "DELETE",
+      });
+      const result = await response.json();
+      
+      if (!response.ok || result.error) {
+        alert("Error al eliminar: " + (result.error || response.statusText));
+      } else {
+        setData(prev => prev.filter(n => n.pedido_venta !== pedido_venta));
+      }
+    } catch (err: any) {
+      alert("Error al comunicarse con el servidor: " + err.message);
     }
   };
 
