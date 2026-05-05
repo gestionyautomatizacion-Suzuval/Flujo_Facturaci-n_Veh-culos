@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { PDFParse } from "pdf-parse";
+import pdfParse from "pdf-parse";
 import { obtenerRegionPorComuna } from "@/lib/chile";
 
 export async function POST(request: Request) {
@@ -19,9 +19,8 @@ export async function POST(request: Request) {
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Parse PDF using pdf-parse v2+
-    const pdfParser = new PDFParse({ data: buffer });
-    const parsed = await pdfParser.getText();
+    // Parse PDF using pdf-parse v1.1.1
+    const parsed = await pdfParse(buffer);
     const text = parsed.text;
 
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
