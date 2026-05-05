@@ -231,10 +231,11 @@ export default function KanbanBoard({ initialData, isAdmin = false, cardSize = '
                                   
                                   <div className="mb-3 text-sm font-medium text-slate-600 truncate">
                                     {item.marca} {item.modelo}
-                                    <span className="text-xs text-slate-400 font-normal block mt-0.5 whitespace-normal">
-                                      {item.color}
-                                      {item.ano ? ` - ${item.ano}` : ''}
-                                    </span>
+                                    {item.ano && (
+                                      <span className="text-xs text-slate-400 font-normal block mt-0.5 whitespace-normal">
+                                        {item.ano}
+                                      </span>
+                                    )}
                                   </div>
 
                                   <div className="space-y-2 text-xs text-slate-500">

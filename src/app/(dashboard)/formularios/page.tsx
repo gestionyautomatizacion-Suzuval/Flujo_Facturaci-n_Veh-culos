@@ -3,19 +3,31 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
-import { Plus, Calculator, Search, ChevronRight, FileSpreadsheet } from "lucide-react";
+import { Plus, Calculator, Search, ChevronRight, FileSpreadsheet, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function FormulariosPage() {
   const [formularios, setFormularios] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
   const supabase = createClient();
   const router = useRouter();
 
   useEffect(() => {
     fetchFormularios();
+    checkAdminStatus();
   }, []);
+
+  const checkAdminStatus = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.email) {
+      const { data } = await supabase.from("perfiles").select("rol").eq("email", user.email).single();
+      if (data && data.rol === "ADMIN") {
+        setIsAdmin(true);
+      }
+    }
+  };
 
   const fetchFormularios = async () => {
     setLoading(true);
@@ -32,6 +44,18 @@ export default function FormulariosPage() {
 
   const handleCreateNew = () => {
     router.push("/formularios/nuevo");
+  };
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!confirm("¿Estás seguro de eliminar este cálculo? Esta acción no se puede deshacer.")) return;
+    
+    const { error } = await supabase.from("formularios_facturacion").delete().eq("id", id);
+    if (!error) {
+      fetchFormularios();
+    } else {
+      alert("Error al eliminar: " + error.message);
+    }
   };
 
   const filtered = formularios.filter(f => 
@@ -135,7 +159,18 @@ export default function FormulariosPage() {
                         <div className="text-sm font-medium text-slate-500 truncate max-w-[150px]" title={form.creador_email || "No registrado"}>{form.creador_email || "-"}</div>
                       </td>
                       <td className="py-4 px-6 align-middle text-center">
-                        <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-indigo-500 mx-auto transition-colors" />
+                        <div className="flex items-center justify-center gap-2">
+                          <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-indigo-500 transition-colors" />
+                          {isAdmin && (
+                            <button
+                              onClick={(e) => handleDelete(e, form.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50 focus:outline-none"
+                              title="Eliminar cálculo"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
