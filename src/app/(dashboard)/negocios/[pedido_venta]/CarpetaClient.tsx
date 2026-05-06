@@ -1728,8 +1728,8 @@ export default function CarpetaClient({ negocio }: Props) {
                       <div className="flex-1 min-w-[180px] max-w-xs">
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Fecha Prepago</p>
                         <div className="text-sm font-semibold text-slate-800 break-words">
-                          {((negocio as any).prepago_vigente && (negocio as any).fecha_prepago) ? (
-                            <span className="text-sm text-slate-800">{format(new Date(`${(negocio as any).fecha_prepago}T12:00:00`), "dd MMM yyyy", { locale: es })}</span>
+                          {((negocio as any).prepago_vigente && (negocio as any).fecha_vencimiento_prepago) ? (
+                            <span className="text-sm text-slate-800">{format(new Date(`${(negocio as any).fecha_vencimiento_prepago}T12:00:00`), "dd MMM yyyy", { locale: es })}</span>
                           ) : (
                             <span className="text-slate-400 italic">N/A</span>
                           )}
