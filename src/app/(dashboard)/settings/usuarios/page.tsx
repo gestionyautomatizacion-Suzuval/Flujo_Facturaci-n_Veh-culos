@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Copy, Plus, Users, ShieldCheck, Save, X, Loader2, AlertCircle, Edit, ShieldAlert, CheckCircle2 } from "lucide-react";
+import { Copy, Plus, Users, ShieldCheck, Save, X, Loader2, AlertCircle, Edit, ShieldAlert, CheckCircle2, Trash2 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 
 interface Perfil {
@@ -37,6 +37,7 @@ export default function UsuariosSettingsPage() {
 
   const [err, setErr] = useState("");
   const [succ, setSucc] = useState("");
+  const [currentUserRole, setCurrentUserRole] = useState("");
 
   const supabase = createClient();
 
@@ -48,8 +49,40 @@ export default function UsuariosSettingsPage() {
       .order("created_at", { ascending: false });
 
     if (data) setUsuarios(data);
+
+    const { data: authData } = await supabase.auth.getUser();
+    if (authData?.user) {
+      const { data: perfil } = await supabase
+        .from("perfiles")
+        .select("rol")
+        .eq("id", authData.user.id)
+        .single();
+      if (perfil) {
+        setCurrentUserRole(perfil.rol);
+      }
+    }
+
     setLoading(false);
   };
+
+  const handleDeleteUser = async (user: Perfil) => {
+    if (!confirm(`¿Estás seguro de ELIMINAR permanentemente a ${user.nombre_completo}? Esta acción no se puede deshacer y borrará todos sus accesos.`)) return;
+
+    setErr(""); setSucc("");
+    try {
+      const res = await fetch(`/api/admin/users?userId=${user.id}`, {
+        method: "DELETE",
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Ocurrió un error al eliminar el usuario");
+
+      setSucc(`El usuario ha sido eliminado permanentemente.`);
+      fetchUsuarios();
+    } catch (error: any) {
+      setErr(error.message);
+    }
+  }
 
   useEffect(() => {
     fetchUsuarios();
@@ -260,6 +293,15 @@ export default function UsuariosSettingsPage() {
                        >
                          {u.estado === 'INACTIVO' ? <CheckCircle2 className="w-4 h-4" /> : <ShieldAlert className="w-4 h-4" />}
                        </button>
+                       {currentUserRole === 'ADMIN' && (
+                         <button 
+                           onClick={() => handleDeleteUser(u)}
+                           className="p-2 rounded-lg transition text-slate-400 hover:text-red-600 hover:bg-red-50"
+                           title="Eliminar Cuenta Permanente"
+                         >
+                           <Trash2 className="w-4 h-4" />
+                         </button>
+                       )}
                     </td>
                   </tr>
                 ))

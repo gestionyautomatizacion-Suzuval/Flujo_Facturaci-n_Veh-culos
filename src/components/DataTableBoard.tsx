@@ -15,7 +15,7 @@ const KANBAN_COLUMNS: { id: EstadoNegocio; title: string; color: string; border:
   { id: 'FACTURADO', title: 'Facturados', color: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700' }
 ];
 
-export default function DataTableBoard({ initialData, isAdmin }: { initialData: Negocio[], isAdmin: boolean }) {
+export default function DataTableBoard({ initialData, isAdmin = false, canDelete = false }: { initialData: Negocio[], isAdmin?: boolean, canDelete?: boolean }) {
   const [data, setData] = useState<Negocio[]>(initialData);
   const router = useRouter();
   
@@ -125,7 +125,7 @@ export default function DataTableBoard({ initialData, isAdmin }: { initialData: 
                   <div className="flex flex-col items-end">
                     <span className="text-xs font-medium inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-blue-700 ring-1 ring-inset ring-blue-700/10 w-fit">PV: {item.pedido_venta}</span>
                     <div className="flex items-center gap-2 mt-1">
-                      {isAdmin && (
+                      {canDelete && (
                         <button 
                             onClick={(e) => handleDeleteNegocio(item.pedido_venta, e)}
                             className="text-slate-400 hover:text-red-600 transition-colors"

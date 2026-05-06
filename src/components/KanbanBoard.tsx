@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
-import { Calendar, User, Building2, CreditCard, ChevronRight, Trash2 } from "lucide-react";
+import { Calendar, User, Building2, CreditCard, ChevronRight, Trash2, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { createClient } from "@/utils/supabase/client";
@@ -34,6 +34,8 @@ export interface Negocio {
   mantencion_20000?: number;
   mantencion_30000?: number;
   firma_jefatura_nv?: string | null;
+  primer_admin_email?: string | null;
+  primer_admin_fecha?: string | null;
 }
 
 const KANBAN_COLUMNS: { id: EstadoNegocio; title: string; color: string; border: string }[] = [
@@ -43,7 +45,7 @@ const KANBAN_COLUMNS: { id: EstadoNegocio; title: string; color: string; border:
   { id: 'FACTURADO', title: 'Facturados', color: 'bg-purple-50', border: 'border-purple-200' }
 ];
 
-export default function KanbanBoard({ initialData, isAdmin = false, cardSize = 'large', searchTerm = '' }: { initialData: Negocio[], isAdmin?: boolean, cardSize?: string, searchTerm?: string }) {
+export default function KanbanBoard({ initialData, isAdmin = false, canDelete = false, cardSize = 'large', searchTerm = '' }: { initialData: Negocio[], isAdmin?: boolean, canDelete?: boolean, cardSize?: string, searchTerm?: string }) {
   const [data, setData] = useState<Negocio[]>([]);
   const [isMounted, setIsMounted] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
@@ -112,8 +114,9 @@ export default function KanbanBoard({ initialData, isAdmin = false, cardSize = '
     const negocioIndex = newData.findIndex(n => n.pedido_venta === draggableId);
     
     if (negocioIndex > -1) {
+      const previousState = newData[negocioIndex].estado;
       newData[negocioIndex].estado = destinationId;
-      setData(newData);
+      setData([...newData]);
       setConfirmAction(null);
       
       const { error } = await supabase
@@ -123,8 +126,16 @@ export default function KanbanBoard({ initialData, isAdmin = false, cardSize = '
 
       if (error) {
         console.error("Error moviendo tarjeta en BD:", error);
-        setData(previousData); // Rollback
+        newData[negocioIndex].estado = previousState;
+        setData([...newData]); // Rollback
         alert("Ocurrió un error al mover la tarjeta en los servidores: " + error.message);
+      } else {
+        const { data: authData } = await supabase.auth.getUser();
+        await supabase.from('negocios_comentarios').insert([{
+          pedido_venta: draggableId,
+          comentario: `[AUDITORIA]|Estado del negocio cambiado de "${previousState ? previousState.replace(/_/g, ' ') : 'Ninguno'}" a "${destinationId.replace(/_/g, ' ')}"`,
+          usuario_email: authData?.user?.email || 'Sistema'
+        }]);
       }
     }
   };
@@ -180,11 +191,16 @@ export default function KanbanBoard({ initialData, isAdmin = false, cardSize = '
                               onClick={() => router.push(`/negocios/${item.pedido_venta}`)}
                               className={`group relative rounded-xl border bg-white shadow-sm transition-all hover:shadow-md hover:border-blue-400 cursor-pointer ${
                                 snapshot.isDragging ? 'rotate-2 scale-105 shadow-xl ring-2 ring-blue-500 ring-offset-2 z-50' : 'border-slate-200'
-                              } ${!isAdmin ? 'opacity-90 hover:bg-slate-50' : ''} ${cardSize === 'small' ? 'p-3' : 'p-4'}`}
+                              } ${!isAdmin ? 'opacity-90 hover:bg-slate-50' : ''} ${cardSize === 'small' ? 'px-3 pt-1 pb-3' : 'px-4 pt-1 pb-4'}`}
                             >
                               {cardSize === 'small' ? (
                                 /* TARJETA PEQUEÑA (TIPO LISTA) */
                                 <div>
+                                  <div className="mb-1.5 text-center leading-none">
+                                    <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider leading-none">
+                                      Creado {format(new Date(item.created_at), "d MMM, yy - HH:mm", { locale: es })}
+                                    </span>
+                                  </div>
                                   <div className="flex items-center justify-between mb-1">
                                     <span className="inline-flex items-center rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 ring-1 ring-inset ring-blue-700/10">
                                       Interno: {item.interno}
@@ -198,13 +214,26 @@ export default function KanbanBoard({ initialData, isAdmin = false, cardSize = '
                                       {item.nombre_apellido}
                                     </p>
                                   )}
-                                  <div className="flex items-center justify-between text-[11px] text-slate-500">
-                                    <div className="flex items-center truncate">
-                                      <Building2 className="mr-1 h-3 w-3 shrink-0" />
-                                      <span className="truncate">{item.suc_vta.split('-')[1]?.trim() || item.suc_vta}</span>
+                                  <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2">
+                                    <div className="flex flex-col">
+                                      <div className="flex items-center truncate mb-1">
+                                        <Building2 className="mr-1 h-3 w-3 shrink-0" />
+                                        <span className="truncate">{item.suc_vta.split('-')[1]?.trim() || item.suc_vta}</span>
+                                      </div>
+                                      {item.primer_admin_email ? (
+                                        <span className="flex items-center gap-1 text-[9px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded w-max border border-blue-100" title="Primer Administrativo en revisar">
+                                          <Eye className="h-2.5 w-2.5 shrink-0" />
+                                          <span className="truncate max-w-[80px]">{item.primer_admin_email.split('@')[0]}</span>
+                                          <span className="opacity-60 shrink-0">• {format(new Date(item.primer_admin_fecha!), "dd/MM HH:mm")}</span>
+                                        </span>
+                                      ) : (
+                                        <span className="flex items-center text-[9px] text-slate-300">
+                                          <Eye className="mr-1 h-2.5 w-2.5" /> Sin rev. Control Ventas
+                                        </span>
+                                      )}
                                     </div>
-                                    <div className="flex items-center gap-1">
-                                      {isAdmin && (
+                                    <div className="flex items-center gap-1 self-end">
+                                      {canDelete && (
                                         <button 
                                             onClick={(e) => handleDeleteNegocio(item.pedido_venta, e)}
                                             className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-50 text-slate-400 transition-colors hover:bg-red-100 hover:text-red-600"
@@ -222,6 +251,11 @@ export default function KanbanBoard({ initialData, isAdmin = false, cardSize = '
                               ) : (
                                 /* TARJETA GRANDE ORIGINAL */
                                 <div>
+                                  <div className="mb-2 text-center leading-none">
+                                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-none">
+                                      Creado {format(new Date(item.created_at), "d MMM, yy - HH:mm", { locale: es })}
+                                    </span>
+                                  </div>
                                   <div className="mb-3 flex items-start justify-between">
                                     <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
                                       Interno: {item.interno}
@@ -263,13 +297,20 @@ export default function KanbanBoard({ initialData, isAdmin = false, cardSize = '
                                   
                                   <div className="flex items-center justify-between text-xs">
                                     <div className="flex flex-col text-[10px] text-slate-400 font-medium">
-                                      <span className="flex items-center">
-                                        <Calendar className="mr-1 h-3 w-3" />
-                                        {format(new Date(item.created_at), "d MMM, yy - HH:mm", { locale: es })}
-                                      </span>
+                                      {item.primer_admin_email ? (
+                                        <span className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-100" title="Primer Administrativo en revisar">
+                                          <Eye className="h-3.5 w-3.5 shrink-0" />
+                                          <span className="truncate max-w-[120px]">{item.primer_admin_email.split('@')[0]}</span>
+                                          <span className="opacity-60 shrink-0">• {format(new Date(item.primer_admin_fecha!), "dd/MM HH:mm")}</span>
+                                        </span>
+                                      ) : (
+                                        <span className="flex items-center text-slate-300">
+                                          <Eye className="mr-1 h-3.5 w-3.5" /> Sin revisión de Control Ventas
+                                        </span>
+                                      )}
                                     </div>
                                     <div className="flex items-center gap-1">
-                                      {isAdmin && (
+                                      {canDelete && (
                                         <button 
                                             onClick={(e) => handleDeleteNegocio(item.pedido_venta, e)}
                                             className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-50 text-slate-400 transition-colors hover:bg-red-100 hover:text-red-600"

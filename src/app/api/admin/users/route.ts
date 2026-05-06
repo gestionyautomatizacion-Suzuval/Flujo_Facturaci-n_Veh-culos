@@ -100,3 +100,52 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get("userId");
+
+    if (!userId) {
+      return NextResponse.json({ error: "Falta parámetro userId" }, { status: 400 });
+    }
+
+    const { createClient: createServerClient } = await import("@/utils/supabase/server");
+    const supabaseSession = await createServerClient();
+    
+    const { data: { user } } = await supabaseSession.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
+    const { data: perfil } = await supabaseSession
+      .from("perfiles")
+      .select("rol")
+      .eq("id", user.id)
+      .single();
+
+    if (!perfil || perfil.rol !== "ADMIN") {
+      return NextResponse.json({ error: "Permiso denegado. Solo los administradores (ADMIN) pueden eliminar cuentas de usuario." }, { status: 403 });
+    }
+
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+    if (!serviceKey || !projectUrl) {
+      return NextResponse.json({ error: "Falta configurar SUPABASE_SERVICE_ROLE_KEY en el servidor" }, { status: 500 });
+    }
+
+    const supabaseAdmin = createClient(projectUrl, serviceKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    });
+
+    const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    if (authError) throw new Error(authError.message);
+
+    await supabaseAdmin.from('perfiles').delete().eq('id', userId);
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}

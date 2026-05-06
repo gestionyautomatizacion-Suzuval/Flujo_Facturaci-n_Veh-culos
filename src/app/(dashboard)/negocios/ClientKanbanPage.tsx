@@ -76,7 +76,7 @@ export default function ClientKanbanPage({ initialData, userRole = "VENDEDOR" }:
         <span className="text-2xl">+</span>
       </button>
 
-      <KanbanBoard initialData={initialData} isAdmin={isAdmin} cardSize={cardSize} searchTerm={searchTerm} />
+      <KanbanBoard initialData={initialData} isAdmin={isAdmin} canDelete={userRole === 'ADMIN'} cardSize={cardSize} searchTerm={searchTerm} />
 
       {isModalOpen && (
         <NuevoNegocioModal 

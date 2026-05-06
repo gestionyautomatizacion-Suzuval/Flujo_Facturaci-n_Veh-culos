@@ -78,6 +78,12 @@ export default function CuadraturaSection({ negocio, badgeSlot }: Props) {
     if (error) {
       alert("Error al vincular RUT: " + error.message);
     } else {
+      const { data: authData } = await supabase.auth.getUser();
+      await supabase.from('negocios_comentarios').insert([{
+        pedido_venta: negocio.pedido_venta,
+        comentario: `[AUDITORIA]|Cuadratura cargada: RUT ${data.rut}`,
+        usuario_email: authData?.user?.email || 'Sistema'
+      }]);
       router.refresh();
     }
   };

@@ -15,7 +15,7 @@ const KANBAN_COLUMNS: { id: EstadoNegocio; title: string; color: string; border:
   { id: 'FACTURADO', title: 'Facturados', color: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700' }
 ];
 
-export default function StackedListBoard({ data: initialData, isAdmin = false }: { data: Negocio[], isAdmin?: boolean }) {
+export default function StackedListBoard({ data: initialData, isAdmin = false, canDelete = false }: { data: Negocio[], isAdmin?: boolean, canDelete?: boolean }) {
   const router = useRouter();
   const [data, setData] = useState<Negocio[]>(initialData);
 
@@ -104,7 +104,7 @@ export default function StackedListBoard({ data: initialData, isAdmin = false }:
                     </div>
 
                     <div className="flex items-center justify-center shrink-0 pr-2 gap-2">
-                       {isAdmin && (
+                       {canDelete && (
                          <button 
                              onClick={(e) => handleDeleteNegocio(item.pedido_venta, e)}
                              className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 text-slate-400 transition-colors hover:bg-red-500 hover:text-white"

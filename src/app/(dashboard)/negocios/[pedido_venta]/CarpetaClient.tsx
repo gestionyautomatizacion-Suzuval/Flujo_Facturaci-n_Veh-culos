@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { ChevronLeft, ChevronRight, MessageSquare, Paperclip, Send, File, Image as ImageIcon, UploadCloud, Download, Loader2, Eye, X, AlertTriangle, ExternalLink, Check, Trash2, FileSignature, Calendar, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, MessageSquare, Paperclip, Send, File, Image as ImageIcon, UploadCloud, Download, Loader2, Eye, X, AlertTriangle, ExternalLink, Check, Trash2, FileSignature, Calendar, RefreshCw, Play } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { createClient } from "@/utils/supabase/client";
@@ -39,7 +39,8 @@ interface Props {
 
 export default function CarpetaClient({ negocio }: Props) {
   const router = useRouter();
-  const [rightActiveTab, setRightActiveTab] = useState<"requeridos" | "cliente" | "valores" | "archivos" | "firmados">("requeridos");
+  const [rightActiveTab, setRightActiveTab] = useState<"requeridos" | "cliente" | "valores" | "archivos" | "firmados" | "historial">("requeridos");
+  const [leftActiveTab, setLeftActiveTab] = useState<"chat">("chat");
   const [comentarios, setComentarios] = useState<Comentario[]>([]);
   const [docs, setDocs] = useState<DocumentoInterno[]>([]);
   
@@ -63,6 +64,7 @@ export default function CarpetaClient({ negocio }: Props) {
     en: (negocio as any).ctrl_ventas_en || null as string | null,
   });
   const [cvPopupKey, setCvPopupKey] = useState<string | null>(null);
+  const [isStartingRevision, setIsStartingRevision] = useState(false);
   
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [editDocName, setEditDocName] = useState("");
@@ -79,6 +81,7 @@ export default function CarpetaClient({ negocio }: Props) {
   const aporteMarcaInputRef = useRef<HTMLInputElement>(null);
   const cartaMutuoInputRef = useRef<HTMLInputElement>(null);
   const retomaInputRef = useRef<HTMLInputElement>(null);
+  const facturaInputRef = useRef<HTMLInputElement>(null);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
   const firmadoInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -136,6 +139,26 @@ export default function CarpetaClient({ negocio }: Props) {
   const handleValoresChange = (field: string, value: string) => {
     const numValue = value.replace(/\D/g, '');
     setValoresNegocio(prev => ({ ...prev, [field]: Number(numValue) }));
+  };
+
+  const logAuditoria = async (detalles: string) => {
+    const nombreExtraido = userEmail.split("@")[0] || "Sistema";
+    const comentarioEspecial = `[AUDITORIA]|${detalles}`;
+    
+    const { data: chatData } = await supabase
+      .from("negocios_comentarios")
+      .insert([{
+        pedido_venta: negocio.pedido_venta,
+        usuario_nombre: nombreExtraido,
+        usuario_email: userEmail || "sistema@suzuval.cl",
+        comentario: comentarioEspecial
+      }])
+      .select()
+      .single();
+
+    if (chatData) {
+      setComentarios(prev => [...prev, chatData]);
+    }
   };
 
   const handleValoresSave = async (field: string, value: number) => {
@@ -255,6 +278,8 @@ export default function CarpetaClient({ negocio }: Props) {
     if (error) {
        console.error("Error updating firma:", error);
        alert("Error de conexión al actualizar firma.");
+    } else {
+       logAuditoria(`Se ha cambiado el estado de Firma Jefatura a: ${nuevoEstado}`);
     }
   };
 
@@ -417,6 +442,7 @@ export default function CarpetaClient({ negocio }: Props) {
 
       // Descarga automática eliminada a petición del usuario.
       
+      logAuditoria(`Documento generado y guardado: RNVM`);
       alert("Documento generado y guardado exitosamente.");
     } catch (err: any) {
       console.error(err);
@@ -516,6 +542,7 @@ export default function CarpetaClient({ negocio }: Props) {
       if (dbError) throw new Error('Error al guardar el documento MPP en la base de datos.');
       if (docData) setDocs(prev => [docData, ...prev]);
 
+      logAuditoria(`Documento generado y guardado: MPP`);
       alert('Documento MPP generado y guardado exitosamente.');
     } catch (err: any) {
       console.error(err);
@@ -637,6 +664,7 @@ export default function CarpetaClient({ negocio }: Props) {
       if (dbError) throw new Error(`Error al guardar el documento ${tipo} en la base de datos.`);
       if (docData) setDocs(prev => [docData, ...prev]);
 
+      logAuditoria(`Documento generado y guardado: ${tipo.replace('_', ' ')}`);
       alert(`Documento ${tipo.replace('_', ' ')} generado y guardado exitosamente.`);
     } catch (err: any) {
       console.error(err);
@@ -683,6 +711,7 @@ export default function CarpetaClient({ negocio }: Props) {
       if (dbError) throw new Error('Error al guardar el documento DJBF en la base de datos.');
       if (docData) setDocs(prev => [docData, ...prev]);
 
+      logAuditoria(`Documento generado y guardado: DJBF`);
       alert('Documento DJBF generado y guardado exitosamente.');
     } catch (err: any) {
       console.error(err);
@@ -692,18 +721,21 @@ export default function CarpetaClient({ negocio }: Props) {
     }
   };
 
-  const canMarkCV = ['ADMINISTRATIVO', 'ADMIN'].includes(userRole);
+  const canMarkCV = ['ADMINISTRATIVO', 'ADMIN'].includes(userRole) && !!(negocio as any).primer_admin_email;
 
   const handleCtrlVentasSec = async (campo: 'vehiculo' | 'observaciones' | 'cuadratura' | 'cliente' | 'firma', valor: string | null) => {
     const update: Record<string, any> = { [`ctrl_ventas_${campo}`]: valor };
     const now = new Date().toISOString();
     if (valor) { update.ctrl_ventas_por = userEmail; update.ctrl_ventas_en = now; }
     const { error } = await supabase.from('negocios').update(update).eq('pedido_venta', negocio.pedido_venta);
-    if (!error) setCtrlVentas(prev => ({ 
-      ...prev, 
-      [campo]: valor,
-      ...(valor ? { por: userEmail, en: now } : {})
-    }));
+    if (!error) {
+      setCtrlVentas(prev => ({ 
+        ...prev, 
+        [campo]: valor,
+        ...(valor ? { por: userEmail, en: now } : {})
+      }));
+      logAuditoria(`Control Ventas: ${valor === 'OK' ? 'Aprobado' : valor === 'RECHAZADO' ? 'Rechazado' : 'Marca quitada'} en la sección ${campo.toUpperCase()}`);
+    }
     setCvPopupKey(null);
   };
 
@@ -712,11 +744,15 @@ export default function CarpetaClient({ negocio }: Props) {
     const now = new Date().toISOString();
     if (valor) { update.ctrl_ventas_por = userEmail; update.ctrl_ventas_en = now; }
     const { error } = await supabase.from('negocios_documentos').update(update).eq('id', docId);
-    if (!error) setDocs(prev => prev.map(d => d.id === docId ? { 
-      ...d, 
-      ctrl_ventas_estado: valor,
-      ...(valor ? { ctrl_ventas_por: userEmail, ctrl_ventas_en: now } : {})
-    } : d));
+    if (!error) {
+      setDocs(prev => prev.map(d => d.id === docId ? { 
+        ...d, 
+        ctrl_ventas_estado: valor,
+        ...(valor ? { ctrl_ventas_por: userEmail, ctrl_ventas_en: now } : {})
+      } : d));
+      const docName = docs.find(d => d.id === docId)?.nombre_archivo || 'Documento';
+      logAuditoria(`Control Ventas: ${valor === 'OK' ? 'Aprobado' : valor === 'RECHAZADO' ? 'Rechazado' : 'Marca quitada'} en el documento "${docName}"`);
+    }
     setCvPopupKey(null);
   };
 
@@ -727,7 +763,7 @@ export default function CarpetaClient({ negocio }: Props) {
       <div className="relative inline-flex items-center ml-3">
         <button
           onClick={canMarkCV ? (e) => { e.stopPropagation(); setCvPopupKey(isOpen ? null : key); } : undefined}
-          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded border-2 text-xs font-bold transition-all min-w-[80px] h-[26px] justify-center ${valor === 'OK' ? 'bg-green-500 border-green-600 text-white' : valor === 'RECHAZADO' ? 'bg-red-500 border-red-600 text-white' : 'bg-white border-green-400 text-green-600'} ${canMarkCV ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded border-2 text-xs font-bold transition-all min-w-[80px] h-[26px] justify-center ${valor === 'OK' ? 'bg-green-500 border-green-600 text-white' : valor === 'RECHAZADO' ? 'bg-red-500 border-red-600 text-white' : (!canMarkCV ? 'bg-slate-100 border-slate-300 text-slate-400' : 'bg-white border-green-400 text-green-600')} ${canMarkCV ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed opacity-80'}`}
           title={canMarkCV ? 'Control Ventas' : (valor || 'Sin marcar')}
         >
           {valor === 'OK' && <><Check className="w-3 h-3" /><span>OK</span></>}
@@ -757,7 +793,7 @@ export default function CarpetaClient({ negocio }: Props) {
       <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1" onClick={e => e.stopPropagation()}>
         <button
           onClick={canMarkCV ? () => setCvPopupKey(isOpen ? null : key) : undefined}
-          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded border-2 text-xs font-bold transition-all shadow-sm min-w-[70px] h-[26px] justify-center ${valor === 'OK' ? 'bg-green-500 border-green-600 text-white' : valor === 'RECHAZADO' ? 'bg-red-500 border-red-600 text-white' : 'bg-white border-green-400 text-green-600'} ${canMarkCV ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded border-2 text-xs font-bold transition-all shadow-sm min-w-[70px] h-[26px] justify-center ${valor === 'OK' ? 'bg-green-500 border-green-600 text-white' : valor === 'RECHAZADO' ? 'bg-red-500 border-red-600 text-white' : (!canMarkCV ? 'bg-slate-100 border-slate-300 text-slate-400' : 'bg-white border-green-400 text-green-600')} ${canMarkCV ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed opacity-80'}`}
           title={canMarkCV ? 'Control Ventas' : (valor || 'Sin marcar')}
         >
           {valor === 'OK' && <><Check className="w-3 h-3" /><span>OK</span></>}
@@ -777,6 +813,28 @@ export default function CarpetaClient({ negocio }: Props) {
         )}
       </div>
     );
+  };
+
+  const handleInicioRevision = async () => {
+    setIsStartingRevision(true);
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from('negocios')
+      .update({ primer_admin_email: userEmail, primer_admin_fecha: now })
+      .eq('pedido_venta', negocio.pedido_venta);
+      
+    if (error) {
+      alert("Error al iniciar revisión: " + error.message);
+      setIsStartingRevision(false);
+      return;
+    }
+    
+    (negocio as any).primer_admin_email = userEmail;
+    (negocio as any).primer_admin_fecha = now;
+    
+    logAuditoria(`Ha iniciado la primera revisión de la carpeta`);
+    router.refresh();
+    setIsStartingRevision(false);
   };
 
   const handleDeleteNegocio = async () => {
@@ -956,6 +1014,7 @@ export default function CarpetaClient({ negocio }: Props) {
 
     if (!dbError && docData) {
       setDocs([docData, ...docs]);
+      logAuditoria(`Documento adjuntado: ${finalFileName}`);
     }
 
     setUploading(false);
@@ -1018,6 +1077,7 @@ export default function CarpetaClient({ negocio }: Props) {
 
     if (!dbError && docData) {
       setDocs([docData, ...docs]);
+      logAuditoria(`Documento firmado adjuntado: ${finalFileName}`);
     }
     setUploading(false);
     if (firmadoInputRef.current) firmadoInputRef.current.value = "";
@@ -1076,6 +1136,7 @@ export default function CarpetaClient({ negocio }: Props) {
       
     if (!dbError && docData) {
       setDocs(prev => prev.map(d => d.id === replacingDocId ? docData : d));
+      logAuditoria(`Documento reemplazado: ${docToReplace?.nombre_archivo} por ${cleanFileName}`);
     } else {
       alert("Error actualizando la base de datos.");
     }
@@ -1085,7 +1146,7 @@ export default function CarpetaClient({ negocio }: Props) {
     if (replaceInputRef.current) replaceInputRef.current.value = "";
   };
 
-  const handleSpecialUpload = async (e: React.ChangeEvent<HTMLInputElement>, tipo: 'Nota de Venta' | 'Carnet Identidad Cliente' | 'Aporte Marca Z126' | 'Carta Mutuo Crédito' | 'Retoma Auto Usado' | 'RNVM' | 'MPP' | 'PEP_PERSONA' | 'PEP_EMPRESA' | 'DJBF', setter: (v: string | null) => void, inputRef: React.RefObject<HTMLInputElement | null>) => {
+  const handleSpecialUpload = async (e: React.ChangeEvent<HTMLInputElement>, tipo: 'Nota de Venta' | 'Carnet Identidad Cliente' | 'Aporte Marca Z126' | 'Carta Mutuo Crédito' | 'Retoma Auto Usado' | 'RNVM' | 'MPP' | 'PEP_PERSONA' | 'PEP_EMPRESA' | 'DJBF' | 'Factura', setter: (v: string | null) => void, inputRef: React.RefObject<HTMLInputElement | null>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
     
@@ -1120,6 +1181,7 @@ export default function CarpetaClient({ negocio }: Props) {
 
     if (!dbError && docData) {
       setDocs(prev => [docData, ...prev]);
+      logAuditoria(`Documento especial adjuntado (${tipo}): ${cleanFileName}`);
     }
 
     setter(null);
@@ -1162,6 +1224,7 @@ export default function CarpetaClient({ negocio }: Props) {
     e.stopPropagation();
     if (!window.confirm("¿Estás seguro de que quieres eliminar este documento?")) return;
     
+    const docToDelete = docs.find(d => d.id === id);
     const { error } = await supabase.from('negocios_documentos').delete().eq('id', id);
     if (error) {
       alert("Error al eliminar el documento.");
@@ -1170,6 +1233,9 @@ export default function CarpetaClient({ negocio }: Props) {
     }
     
     setDocs(prev => prev.filter(d => d.id !== id));
+    if (docToDelete) {
+      logAuditoria(`Documento eliminado: ${docToDelete.nombre_archivo}`);
+    }
   };
 
   const handleChatFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1313,14 +1379,40 @@ export default function CarpetaClient({ negocio }: Props) {
                 <Trash2 className="w-4 h-4" /> Eliminar
               </button>
             )}
+            {['ADMINISTRATIVO', 'ADMIN'].includes(userRole) && !(negocio as any).primer_admin_email && (
+              <button
+                onClick={handleInicioRevision}
+                disabled={isStartingRevision}
+                className="ml-2 flex items-center justify-center gap-1.5 py-1 px-3 bg-amber-500 text-white font-bold text-sm rounded shadow-sm hover:bg-amber-600 transition-colors border border-amber-500 disabled:opacity-70 disabled:cursor-not-allowed"
+                title="Iniciar Revisión de Carpeta"
+              >
+                {isStartingRevision ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                Inicio Revisión
+              </button>
+            )}
           </div>
           {negocio.nombre_apellido?.trim() !== 'S/N' && (
             <h2 className="text-xl font-bold text-white tracking-tight mt-1">{negocio.nombre_apellido}</h2>
           )}
         </div>
-        <div className="text-blue-200 text-sm font-medium flex items-center gap-1.5">
-          <Calendar className="w-4 h-4" />
-          <span>Creado el {format(new Date(negocio.created_at), "dd/MM/yyyy HH:mm", { locale: es })}</span>
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="text-blue-200 text-sm font-medium flex items-center gap-1.5">
+            {negocio.vendedor_nombre && (
+              <span>
+                {negocio.vendedor_nombre.split('@')[0]}
+              </span>
+            )}
+            <Calendar className="w-4 h-4 ml-1" />
+            <span>
+              Creado el {format(new Date(negocio.created_at), "dd/MM/yyyy HH:mm", { locale: es })}
+            </span>
+          </div>
+          {(negocio as any).primer_admin_email && (
+            <div className="text-white text-base font-bold flex items-center gap-1.5 bg-blue-900/60 px-3 py-1.5 rounded-lg shadow-sm border border-blue-400/30" title="Primer Administrativo en revisar la carpeta">
+              <Eye className="w-5 h-5" />
+              <span>1ra Revisión: {(negocio as any).primer_admin_email.split('@')[0]} • {format(new Date((negocio as any).primer_admin_fecha), "dd/MM HH:mm")}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1346,10 +1438,10 @@ export default function CarpetaClient({ negocio }: Props) {
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
-                <div 
-                  className={`flex-1 border-b-[3px] py-3 text-sm font-bold transition-all border-blue-700 text-blue-800 text-center flex items-center justify-center`}
-                >
-                  Chat del Pedido Venta
+                <div className="flex flex-1">
+                  <div className="flex-1 py-3 text-sm font-bold text-center flex items-center justify-center border-b-2 transition-colors text-blue-700 bg-white border-blue-600">
+                    Chat del Negocio
+                  </div>
                 </div>
               </>
             )}
@@ -1357,59 +1449,63 @@ export default function CarpetaClient({ negocio }: Props) {
 
           <div className={`flex-1 overflow-y-auto ${isPanelCollapsed ? 'hidden' : 'block'}`}>
             <div className="flex flex-col min-h-full justify-end">
-                <div className="flex-1 p-4 space-y-4">
-                  {loading ? (
+                <>
+                  <div className="flex-1 p-4 space-y-4">
+                    {loading ? (
                     <div className="flex justify-center py-6 text-slate-400">
                       <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
                     </div>
-                  ) : comentarios.length === 0 ? (
+                  ) : comentarios.filter(msg => !msg.comentario.startsWith("[AUDITORIA]|")).length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full pt-10 text-slate-400 opacity-60">
                       <MessageSquare className="w-12 h-12 mb-3 text-slate-300" />
                       <p className="text-sm font-medium">Inicia la conversación en esta carpeta</p>
                     </div>
                   ) : (
-                    comentarios.map((msg) => {
-                      const esMio = msg.usuario_email === userEmail;
-                      const esArchivo = msg.comentario.startsWith("[ARCHIVO]|");
-                      
-                      let contentNode;
-                      if (esArchivo) {
-                        const [, nombreBase, docUrl, tamanoStr] = msg.comentario.split("|");
-                        contentNode = (
-                          <div className="flex flex-col gap-1.5 mt-1">
-                            <div className={`flex items-center gap-3 p-3 rounded-xl mb-1 cursor-pointer transition-colors ${esMio ? 'bg-blue-700 hover:bg-blue-800' : 'bg-slate-50 hover:bg-slate-100 border border-slate-200'}`} onClick={() => window.open(docUrl, "_blank")}>
-                              <div className={`p-2 rounded-lg ${esMio ? 'bg-white/20 text-white' : 'bg-white text-blue-600 shadow-sm'}`}>
-                                 <Paperclip className="w-5 h-5" />
+                    comentarios
+                      .filter(msg => !msg.comentario.startsWith("[AUDITORIA]|"))
+                      .map((msg) => {
+                        const esMio = msg.usuario_email === userEmail;
+                        const esArchivo = msg.comentario.startsWith("[ARCHIVO]|");
+                        const esAuditoria = msg.comentario.startsWith("[AUDITORIA]|");
+                        
+                        let contentNode;
+                        if (esArchivo) {
+                          const [, nombreBase, docUrl, tamanoStr] = msg.comentario.split("|");
+                          contentNode = (
+                            <div className="flex flex-col gap-1.5 mt-1">
+                              <div className={`flex items-center gap-3 p-3 rounded-xl mb-1 cursor-pointer transition-colors ${esMio ? 'bg-blue-700 hover:bg-blue-800' : 'bg-slate-50 hover:bg-slate-100 border border-slate-200'}`} onClick={() => window.open(docUrl, "_blank")}>
+                                <div className={`p-2 rounded-lg ${esMio ? 'bg-white/20 text-white' : 'bg-white text-blue-600 shadow-sm'}`}>
+                                   <Paperclip className="w-5 h-5" />
+                                </div>
+                                <div className="overflow-hidden flex-1 pr-2">
+                                  <p className={`text-sm font-bold truncate max-w-[200px] ${esMio ? 'text-white' : 'text-slate-700'}`}>{nombreBase}</p>
+                                  <p className={`text-xs ${esMio ? 'text-blue-200' : 'text-slate-500'}`}>{tamanoStr} KB</p>
+                                </div>
+                                <Download className={`w-4 h-4 shrink-0 ${esMio ? 'text-blue-200' : 'text-slate-400'}`} />
                               </div>
-                              <div className="overflow-hidden flex-1 pr-2">
-                                <p className={`text-sm font-bold truncate max-w-[200px] ${esMio ? 'text-white' : 'text-slate-700'}`}>{nombreBase}</p>
-                                <p className={`text-xs ${esMio ? 'text-blue-200' : 'text-slate-500'}`}>{tamanoStr} KB</p>
+                            </div>
+                          );
+                        } else {
+                          contentNode = msg.comentario;
+                        }
+
+                        return (
+                          <div key={msg.id} className={`flex gap-3 ${esMio ? "justify-end" : "justify-start"}`}>
+                            <div className={`flex flex-col max-w-[85%] ${esMio ? "items-end" : "items-start"}`}>
+                              <div className={`text-xs font-medium text-slate-500 mb-1 px-1`}>
+                                {msg.usuario_nombre} • {format(new Date(msg.created_at), "HH:mm", { locale: es })}
                               </div>
-                              <Download className={`w-4 h-4 shrink-0 ${esMio ? 'text-blue-200' : 'text-slate-400'}`} />
+                              <div className={`px-4 py-3 rounded-2xl text-[14px] ${
+                                esMio 
+                                  ? "bg-blue-600 text-white rounded-br-sm shadow-sm" 
+                                  : "bg-white text-slate-800 border border-slate-100 shadow-sm rounded-bl-sm"
+                              }`}>
+                                {contentNode}
+                              </div>
                             </div>
                           </div>
                         );
-                      } else {
-                        contentNode = msg.comentario;
-                      }
-
-                      return (
-                        <div key={msg.id} className={`flex gap-3 ${esMio ? "justify-end" : "justify-start"}`}>
-                          <div className={`flex flex-col max-w-[85%] ${esMio ? "items-end" : "items-start"}`}>
-                            <div className={`text-xs font-medium text-slate-500 mb-1 px-1`}>
-                              {msg.usuario_nombre} • {format(new Date(msg.created_at), "HH:mm", { locale: es })}
-                            </div>
-                            <div className={`px-4 py-3 rounded-2xl text-[14px] ${
-                              esMio 
-                                ? "bg-blue-600 text-white rounded-br-sm shadow-sm" 
-                                : "bg-white text-slate-800 border border-slate-100 shadow-sm rounded-bl-sm"
-                            }`}>
-                              {contentNode}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
+                      })
                   )}
                   <div ref={chatEndRef} />
                 </div>
@@ -1449,9 +1545,10 @@ export default function CarpetaClient({ negocio }: Props) {
                     </button>
                   </form>
                 </div>
-              </div>
+                </>
             </div>
           </div>
+        </div>
         
         {/* Lado derecho: Placeholder para más acciones (notas internas, checklist, info estructurada, etc) */}
         <div className="hidden md:flex flex-1 bg-slate-100 relative flex-col overflow-hidden min-h-0">
@@ -1470,6 +1567,9 @@ export default function CarpetaClient({ negocio }: Props) {
              <button onClick={() => setRightActiveTab('firmados')} className={`mr-8 pb-3 text-sm font-bold border-b-[3px] transition-all ${rightActiveTab === 'firmados' ? 'border-blue-700 text-blue-800' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>
                 Documentos Firmados
              </button>
+             <button onClick={() => setRightActiveTab('historial')} className={`mr-8 pb-3 text-sm font-bold border-b-[3px] transition-all ${rightActiveTab === 'historial' ? 'border-blue-700 text-blue-800' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>
+                Historial Negocio
+             </button>
           </div>
           
           {/* Botón flotante para reabrir el chat cuando está colapsado */}
@@ -1487,7 +1587,43 @@ export default function CarpetaClient({ negocio }: Props) {
           )}
 
           <div className="w-full flex flex-col p-6 overflow-y-scroll overflow-x-hidden flex-1 scrollbar-custom min-h-0">
-            {rightActiveTab === 'requeridos' ? (
+            {rightActiveTab === 'historial' ? (
+              <div className="h-full flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200 p-6 overflow-y-auto">
+                <div className="space-y-6 mb-10 pb-10 shrink-0">
+                  <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Historial del Negocio</h4>
+                  <div className="flex flex-col space-y-4 mt-4">
+                    {loading ? (
+                      <div className="flex justify-center py-6 text-slate-400">
+                        <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                      </div>
+                    ) : comentarios.filter(msg => msg.comentario.startsWith("[AUDITORIA]|")).length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full pt-10 text-slate-400 opacity-60">
+                        <FileSignature className="w-12 h-12 mb-3 text-slate-300" />
+                        <p className="text-sm font-medium">No hay registros de historial aún</p>
+                      </div>
+                    ) : (
+                      comentarios
+                        .filter(msg => msg.comentario.startsWith("[AUDITORIA]|"))
+                        .map((msg) => {
+                          const details = msg.comentario.replace("[AUDITORIA]|", "");
+                          return (
+                            <div key={msg.id} className="flex gap-3 justify-start">
+                              <div className="flex flex-col items-start w-full">
+                                <div className="text-xs font-medium text-slate-500 mb-1 px-1">
+                                  {msg.usuario_nombre} • {format(new Date(msg.created_at), "dd/MM/yyyy HH:mm", { locale: es })}
+                                </div>
+                                <div className="px-4 py-3 rounded-2xl text-[13px] bg-slate-100 text-slate-700 border border-slate-200 shadow-sm break-words whitespace-pre-wrap w-full">
+                                  {details}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : rightActiveTab === 'requeridos' ? (
               <>
                 <div className="mb-0">
                   <h3 className="text-2xl font-bold text-slate-800 mb-6">Pedido de Venta {negocio.pedido_venta}</h3>
@@ -2008,7 +2144,8 @@ export default function CarpetaClient({ negocio }: Props) {
                       { tipo: 'Carnet Identidad Cliente', desc: 'Frontal y Reverso', icon: ImageIcon, ref: carnetInputRef },
                       { tipo: 'Aporte Marca Z126', desc: 'Copia Correo u Otro', icon: File, ref: aporteMarcaInputRef },
                       { tipo: 'Carta Mutuo Crédito', desc: 'Carta Amicar', icon: File, ref: cartaMutuoInputRef },
-                      { tipo: 'Retoma Auto Usado', desc: 'Documentación de Retoma', icon: ImageIcon, ref: retomaInputRef }
+                      { tipo: 'Retoma Auto Usado', desc: 'Documentación de Retoma', icon: ImageIcon, ref: retomaInputRef },
+                      ...(['ADMINISTRATIVO', 'ADMIN'].includes(userRole) ? [{ tipo: 'Factura', desc: 'Factura del negocio', icon: File, ref: facturaInputRef }] : [])
                     ].map((item: any) => {
                       const doc = docs.find(d => d.nombre_archivo.includes(item.tipo));
                       const Icon = item.icon;
@@ -2111,7 +2248,7 @@ export default function CarpetaClient({ negocio }: Props) {
                         </div>
                       );
                     })}
-                    {docs.filter(d => !d.es_firmado && !['Ficha Conocimiento Cliente', 'Nota de Venta', 'Carnet Identidad Cliente', 'Aporte Marca Z126', 'Carta Mutuo Crédito', 'Retoma Auto Usado', 'RNVM'].some(rt => d.nombre_archivo.includes(rt))).map(doc => (
+                    {docs.filter(d => !d.es_firmado && !['Ficha Conocimiento Cliente', 'Nota de Venta', 'Carnet Identidad Cliente', 'Aporte Marca Z126', 'Carta Mutuo Crédito', 'Retoma Auto Usado', 'RNVM', 'Factura'].some(rt => d.nombre_archivo.includes(rt))).map(doc => (
                       <div 
                         key={doc.id}
                         className="relative p-5 rounded-2xl border-2 border-solid border-slate-200 transition-all flex flex-col items-center justify-center text-center bg-white hover:border-slate-300 hover:shadow-md"
