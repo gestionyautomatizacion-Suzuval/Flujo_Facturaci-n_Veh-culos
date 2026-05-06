@@ -77,6 +77,7 @@ export default function Navbar({ user }: { user: User }) {
           created_at
         `)
         .neq('usuario_email', user.email)
+        .not('comentario', 'ilike', '[AUDITORIA]%')
         .gte('created_at', limitDate)
         .order('created_at', { ascending: false })
         .limit(50);
@@ -106,7 +107,7 @@ export default function Navbar({ user }: { user: User }) {
         schema: 'public',
         table: 'negocios_comentarios'
       }, async (payload) => {
-        if (payload.new.usuario_email !== user.email) {
+        if (payload.new.usuario_email !== user.email && !payload.new.comentario?.startsWith('[AUDITORIA]')) {
           // No need to query negocios table since we already have pedido_venta in the payload
           const data = { pedido_venta: payload.new.pedido_venta };
             
