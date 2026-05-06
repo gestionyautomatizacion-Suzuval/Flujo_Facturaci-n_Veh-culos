@@ -133,7 +133,7 @@ export default function KanbanBoard({ initialData, isAdmin = false, canDelete = 
         const { data: authData } = await supabase.auth.getUser();
         await supabase.from('negocios_comentarios').insert([{
           pedido_venta: draggableId,
-          comentario: `[AUDITORIA]|Estado del negocio cambiado de "${previousState ? previousState.replace(/_/g, ' ') : 'Ninguno'}" a "${destinationId.replace(/_/g, ' ')}"`,
+          comentario: `[AUDITORIA]|Estado del negocio cambiado: ${confirmAction.sourceTitle} -> ${confirmAction.destTitle}`,
           usuario_email: authData?.user?.email || 'Sistema'
         }]);
       }
