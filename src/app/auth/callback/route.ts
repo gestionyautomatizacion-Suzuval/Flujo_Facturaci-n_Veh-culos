@@ -18,6 +18,31 @@ export async function GET(request: Request) {
         await supabase.auth.signOut()
         return NextResponse.redirect(`${origin}/login?error=Solo+se+permiten+correos+de+Suzuval`)
       }
+
+      // Auto-completar perfil si no existe (ej. al entrar por Google OAuth)
+      if (user) {
+        const { data: perfil } = await supabase.from('perfiles').select('id').eq('id', user.id).single()
+        
+        if (!perfil) {
+          const { createClient: createSupabaseClient } = await import('@supabase/supabase-js')
+          const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+          const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+          
+          if (serviceKey && projectUrl) {
+            const supabaseAdmin = createSupabaseClient(projectUrl, serviceKey, {
+              auth: { autoRefreshToken: false, persistSession: false }
+            });
+            await supabaseAdmin.from('perfiles').insert({
+              id: user.id,
+              nombre_completo: user.user_metadata?.full_name || user.user_metadata?.nombre || user.email?.split('@')[0] || "Usuario",
+              email: user.email,
+              rol: "VENDEDOR", // Rol por defecto
+              sucursales: []
+            });
+          }
+        }
+      }
+
       return NextResponse.redirect(`${origin}${next}`)
     } else {
       // Return exact error message
