@@ -20,16 +20,19 @@ export default async function NotificacionesPage() {
       `)
       .neq('usuario_email', user.email)
       .order('created_at', { ascending: false })
-      .limit(100);
+      .limit(300);
 
     if (data) {
-      notifications = data.map((d: any) => ({
-        id: d.id,
-        pedido_venta: d.pedido_venta,
-        usuario_nombre: d.usuario_nombre,
-        comentario: d.comentario,
-        created_at: d.created_at
-      }));
+      notifications = data
+        .filter((d: any) => !d.comentario.startsWith('[AUDITORIA]'))
+        .map((d: any) => ({
+          id: d.id,
+          pedido_venta: d.pedido_venta,
+          usuario_nombre: d.usuario_nombre,
+          comentario: d.comentario,
+          created_at: d.created_at
+        }))
+        .slice(0, 100);
     }
   }
 
