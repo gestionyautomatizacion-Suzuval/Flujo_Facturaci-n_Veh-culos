@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { CarFront, AlertCircle } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+import Image from "next/image";
 
 function LoginContent() {
   const searchParams = useSearchParams();
@@ -50,8 +51,8 @@ function LoginContent() {
       <div className="relative w-full max-w-md p-8 overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl">
         <div className="relative z-20 flex flex-col items-center">
           
-          <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-blue-800 shadow-lg shadow-blue-800/30">
-            <CarFront className="h-10 w-10 text-white" />
+          <div className="mb-6 flex items-center justify-center">
+            <Image src="/logo.png" alt="Suzuval Logo" width={140} height={140} className="object-contain" priority />
           </div>
 
           <h1 className="mb-2 text-3xl font-bold tracking-tight text-slate-800">Facturación Vehículos</h1>

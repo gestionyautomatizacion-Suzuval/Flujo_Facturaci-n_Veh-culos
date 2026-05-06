@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
+import Image from "next/image";
 import { 
   CarFront, 
   LayoutDashboard, 
@@ -100,7 +101,7 @@ export default function Sidebar() {
   return (
     <div className={`relative hidden md:flex flex-col border-r border-slate-200 bg-slate-50 transition-all duration-300 ${isCollapsed ? 'w-20' : 'w-56'}`}>
       <div className={`flex h-16 shrink-0 items-center border-b border-slate-200 font-bold tracking-tight text-blue-900 bg-white ${isCollapsed ? 'justify-center px-0' : 'px-4'}`}>
-        <CarFront className="w-5 h-5 text-blue-800 shrink-0" />
+        <Image src="/logo.png" alt="Suzuval Logo" width={36} height={36} className="shrink-0 object-contain" />
         {!isCollapsed && <span className="ml-2 truncate text-sm">Facturación Vehículos</span>}
       </div>
       
