@@ -8,10 +8,14 @@ export default async function DashboardSummary() {
 
   const { data: { user } } = await supabase.auth.getUser();
   let metaMensual = 12; // default fallback
+  let isAdmin = false;
   if (user) {
-    const { data: perfil } = await supabase.from("perfiles").select("meta_mensual").eq("id", user.id).single();
+    const { data: perfil } = await supabase.from("perfiles").select("meta_mensual, rol").eq("id", user.id).single();
     if (perfil && perfil.meta_mensual !== null) {
       metaMensual = perfil.meta_mensual;
+    }
+    if (perfil?.rol === "ADMIN") {
+      isAdmin = true;
     }
   }
 
@@ -110,20 +114,22 @@ export default async function DashboardSummary() {
         })}
       </div>
 
-      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">Actividad Reciente</h2>
-          <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50">
-            <p className="text-sm text-slate-500">Listado de actividad (Próximamente)</p>
+      {isAdmin && (
+        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Actividad Reciente</h2>
+            <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50">
+              <p className="text-sm text-slate-500">Listado de actividad (Próximamente)</p>
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Estado General</h2>
+            <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50">
+              <p className="text-sm text-slate-500">Gráfico de conversión (Próximamente)</p>
+            </div>
           </div>
         </div>
-        <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">Estado General</h2>
-          <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50">
-            <p className="text-sm text-slate-500">Gráfico de conversión (Próximamente)</p>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
