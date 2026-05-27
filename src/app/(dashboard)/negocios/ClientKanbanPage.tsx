@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import KanbanBoard, { Negocio } from "@/components/KanbanBoard";
 import NuevoNegocioModal from "@/components/NuevoNegocioModal";
 import { LayoutGrid, AlignJustify, Search, X } from "lucide-react";
+import { createClient } from "@/utils/supabase/client";
 
 export type CardSize = 'large' | 'small';
 
@@ -12,6 +13,60 @@ export default function ClientKanbanPage({ initialData, userRole = "VENDEDOR" }:
   const [cardSize, setCardSize] = useState<CardSize>('large');
   const [searchTerm, setSearchTerm] = useState("");
   const isAdmin = ["ADMINISTRATIVO", "GERENCIA", "ADMIN"].includes(userRole);
+  
+  const [unreadChats, setUnreadChats] = useState<Set<string>>(new Set());
+  const [userEmail, setUserEmail] = useState("");
+  const userEmailRef = useRef(userEmail);
+
+  useEffect(() => {
+    userEmailRef.current = userEmail;
+  }, [userEmail]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user?.email) {
+        setUserEmail(data.user.email);
+      }
+    });
+
+    if (!isAdmin) return;
+
+    // Cargar chats sin leer de localStorage
+    const stored = localStorage.getItem("unread_negocios_chats");
+    if (stored) {
+      try {
+        setUnreadChats(new Set(JSON.parse(stored)));
+      } catch (e) {}
+    }
+
+    const channel = supabase.channel('global-comentarios-kanban')
+      .on(
+        'postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'negocios_comentarios' }, 
+        (payload) => {
+          const newMsg = payload.new as any;
+          console.log("Nuevo comentario recibido en Kanban:", newMsg);
+          
+          if (!newMsg.comentario.startsWith("[AUDITORIA]|")) {
+            setUnreadChats(prev => {
+              const next = new Set(prev);
+              next.add(newMsg.pedido_venta);
+              localStorage.setItem("unread_negocios_chats", JSON.stringify(Array.from(next)));
+              console.log("Notificación activada para PV:", newMsg.pedido_venta);
+              return next;
+            });
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log("Estado de suscripción Kanban global:", status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isAdmin]);
 
   return (
     <>
@@ -76,7 +131,7 @@ export default function ClientKanbanPage({ initialData, userRole = "VENDEDOR" }:
         <span className="text-2xl">+</span>
       </button>
 
-      <KanbanBoard initialData={initialData} isAdmin={isAdmin} canDelete={userRole === 'ADMIN'} cardSize={cardSize} searchTerm={searchTerm} />
+      <KanbanBoard initialData={initialData} isAdmin={isAdmin} canDelete={userRole === 'ADMIN'} cardSize={cardSize} searchTerm={searchTerm} unreadChats={unreadChats} />
 
       {isModalOpen && (
         <NuevoNegocioModal 

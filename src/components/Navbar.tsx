@@ -74,9 +74,11 @@ export default function Navbar({ user }: { user: User }) {
           pedido_venta, 
           usuario_nombre, 
           comentario,
-          created_at
+          created_at,
+          negocios!inner(vendedor_nombre)
         `)
         .neq('usuario_email', user.email)
+        .eq('negocios.vendedor_nombre', user.email)
         .not('comentario', 'ilike', '[AUDITORIA]%')
         .gte('created_at', limitDate)
         .order('created_at', { ascending: false })
@@ -108,13 +110,16 @@ export default function Navbar({ user }: { user: User }) {
         table: 'negocios_comentarios'
       }, async (payload) => {
         if (payload.new.usuario_email !== user.email && !payload.new.comentario?.startsWith('[AUDITORIA]')) {
-          // No need to query negocios table since we already have pedido_venta in the payload
-          const data = { pedido_venta: payload.new.pedido_venta };
+          const { data } = await supabase
+            .from('negocios')
+            .select('vendedor_nombre')
+            .eq('pedido_venta', payload.new.pedido_venta)
+            .single();
             
-          if (data?.pedido_venta) {
+          if (data && data.vendedor_nombre === user.email) {
             setNotifications(prev => [{
               id: payload.new.id,
-              pedido_venta: data.pedido_venta,
+              pedido_venta: payload.new.pedido_venta,
               usuario_nombre: payload.new.usuario_nombre,
               comentario: payload.new.comentario,
               created_at: payload.new.created_at

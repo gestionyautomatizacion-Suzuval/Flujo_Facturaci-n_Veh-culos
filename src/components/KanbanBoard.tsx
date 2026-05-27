@@ -36,6 +36,7 @@ export interface Negocio {
   firma_jefatura_nv?: string | null;
   primer_admin_email?: string | null;
   primer_admin_fecha?: string | null;
+  carta_mutuo_datos?: any;
 }
 
 const KANBAN_COLUMNS: { id: EstadoNegocio; title: string; color: string; border: string }[] = [
@@ -45,7 +46,7 @@ const KANBAN_COLUMNS: { id: EstadoNegocio; title: string; color: string; border:
   { id: 'FACTURADO', title: 'Facturados', color: 'bg-purple-50', border: 'border-purple-200' }
 ];
 
-export default function KanbanBoard({ initialData, isAdmin = false, canDelete = false, cardSize = 'large', searchTerm = '' }: { initialData: Negocio[], isAdmin?: boolean, canDelete?: boolean, cardSize?: string, searchTerm?: string }) {
+export default function KanbanBoard({ initialData, isAdmin = false, canDelete = false, cardSize = 'large', searchTerm = '', unreadChats = new Set() }: { initialData: Negocio[], isAdmin?: boolean, canDelete?: boolean, cardSize?: string, searchTerm?: string, unreadChats?: Set<string> }) {
   const [data, setData] = useState<Negocio[]>([]);
   const [isMounted, setIsMounted] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
@@ -188,11 +189,27 @@ export default function KanbanBoard({ initialData, isAdmin = false, canDelete = 
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
-                              onClick={() => router.push(`/negocios/${item.pedido_venta}`)}
+                              onClick={() => {
+                                const stored = localStorage.getItem("unread_negocios_chats");
+                                if (stored) {
+                                  try {
+                                    let arr = JSON.parse(stored);
+                                    arr = arr.filter((pv: string) => pv !== item.pedido_venta);
+                                    localStorage.setItem("unread_negocios_chats", JSON.stringify(arr));
+                                  } catch (e) {}
+                                }
+                                router.push(`/negocios/${item.pedido_venta}`);
+                              }}
                               className={`group relative rounded-xl border bg-white shadow-sm transition-all hover:shadow-md hover:border-blue-400 cursor-pointer ${
                                 snapshot.isDragging ? 'rotate-2 scale-105 shadow-xl ring-2 ring-blue-500 ring-offset-2 z-50' : 'border-slate-200'
                               } ${!isAdmin ? 'opacity-90 hover:bg-slate-50' : ''} ${cardSize === 'small' ? 'px-3 pt-1 pb-3' : 'px-4 pt-1 pb-4'}`}
                             >
+                              {unreadChats?.has(item.pedido_venta) && (
+                                <span className="absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5 z-10">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-orange-500 ring-2 ring-white shadow-sm"></span>
+                                </span>
+                              )}
                               {cardSize === 'small' ? (
                                 /* TARJETA PEQUEÑA (TIPO LISTA) */
                                 <div>

@@ -10,6 +10,7 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { Negocio } from "@/components/KanbanBoard";
 import CuadraturaSection from "./CuadraturaSection";
 import { todasLasComunas, obtenerRegionPorComuna, regionesYcomunas } from "@/lib/chile";
+import Papa from "papaparse";
 
 interface Comentario {
   id: string;
@@ -54,6 +55,25 @@ export default function CarpetaClient({ negocio }: Props) {
   const [userRole, setUserRole] = useState("VENDEDOR");
   const [firmaJefaturaNV, setFirmaJefaturaNV] = useState((negocio as any).firma_jefatura_nv || null);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  
+  const [cartaMutuoDatos, setCartaMutuoDatos] = useState<any>((negocio as any).carta_mutuo_datos || null);
+  const [isConsultingMutuo, setIsConsultingMutuo] = useState(false);
+
+  const isPanelCollapsedRef = useRef(isPanelCollapsed);
+  const userEmailRef = useRef(userEmail);
+  const userRoleRef = useRef(userRole);
+
+  useEffect(() => {
+    userRoleRef.current = userRole;
+  }, [userRole]);
+
+  useEffect(() => {
+    isPanelCollapsedRef.current = isPanelCollapsed;
+  }, [isPanelCollapsed]);
+
+  useEffect(() => {
+    userEmailRef.current = userEmail;
+  }, [userEmail]);
   const [ctrlVentas, setCtrlVentas] = useState({
     vehiculo: (negocio as any).ctrl_ventas_vehiculo || null as string | null,
     observaciones: (negocio as any).ctrl_ventas_observaciones || null as string | null,
@@ -257,7 +277,104 @@ export default function CarpetaClient({ negocio }: Props) {
     };
 
     initData();
+
+    const channel = supabase.channel(`comentarios-${negocio.pedido_venta}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "negocios_comentarios",
+          filter: `pedido_venta=eq.${negocio.pedido_venta}`
+        },
+        (payload) => {
+          const newComentario = payload.new as Comentario;
+          setComentarios(prev => {
+            if (prev.some(c => c.id === newComentario.id)) return prev;
+            return [...prev, newComentario];
+          });
+          setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+          if (["ADMIN", "ADMINISTRATIVO"].includes(userRoleRef.current)) {
+            // Notifications are now handled globally in the KanbanBoard
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [negocio.pedido_venta]);
+
+  const handleConsultarMutuoCredito = async () => {
+    setIsConsultingMutuo(true);
+    try {
+      const cli = extractedCliente || (negocio as any).cliente || negocio || {};
+      let rut = manualCliente.rut || cli.rut || (negocio as any).rut || '';
+      
+      if (!rut) {
+        alert("No se encontró el RUT del cliente para buscar.");
+        setIsConsultingMutuo(false);
+        return;
+      }
+      
+      const cleanRut = rut.replace(/\./g, '').trim().toUpperCase();
+
+      const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRG3luPdAVrYhat2iQ4gilXicaQEsvuICqR05qq689lCJ_kBIcr_kGRbl22jU65pNE-i8tlkIB6Ux5O/pub?gid=2035997132&single=true&output=csv";
+      const res = await fetch(csvUrl);
+      const csvText = await res.text();
+      
+      Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: true,
+        complete: async (results) => {
+          const data = results.data as any[];
+          const found = data.find(row => {
+            const rowRut = (row["Rut Cliente"] || "").replace(/\./g, '').trim().toUpperCase();
+            return rowRut === cleanRut;
+          });
+
+          if (found) {
+            const extractedData = {
+              "ID Crédito": found["ID Crédito"],
+              "Marca": found["Marca"],
+              "Modelo": found["Modelo"],
+              "Version": found["Version"],
+              "Entidad Financiera": found["Entidad Financiera"],
+              "Fec. Adj.": found["Fec. Adj."],
+              "Tipo Crédito": found["Tipo Crédito"],
+              "Nombre Producto": found["Nombre Producto"],
+              "Saldo": found["Saldo"],
+              "Vendedor": found["Vendedor"],
+              "F&I": found["F&I"]
+            };
+
+            const { error } = await supabase.from('negocios').update({ carta_mutuo_datos: extractedData }).eq('pedido_venta', negocio.pedido_venta);
+            if (error) {
+              console.error("Error guardando datos carta mutuo:", error);
+              alert("Error al guardar los datos en la base de datos.");
+            } else {
+              setCartaMutuoDatos(extractedData);
+              logAuditoria(`Consultó Google Sheet Carta Mutuo con éxito para el RUT ${rut}`);
+              alert("Datos consultados y guardados exitosamente.");
+            }
+          } else {
+            alert(`No se encontró el RUT ${rut} en el Google Sheet.`);
+          }
+          setIsConsultingMutuo(false);
+        },
+        error: (error: any) => {
+          console.error("Error parsing CSV:", error);
+          alert("Error al procesar el archivo CSV.");
+          setIsConsultingMutuo(false);
+        }
+      });
+    } catch (e: any) {
+      console.error(e);
+      alert("Error al consultar Google Sheet.");
+      setIsConsultingMutuo(false);
+    }
+  };
 
   const handleFirmaNV = async (nuevoEstado: string) => {
     setFirmaJefaturaNV(nuevoEstado);
@@ -2149,25 +2266,87 @@ export default function CarpetaClient({ negocio }: Props) {
                     ].map((item: any) => {
                       const doc = docs.find(d => d.nombre_archivo.includes(item.tipo));
                       const Icon = item.icon;
+                      const isCartaMutuo = item.tipo === 'Carta Mutuo Crédito';
+                      const hasDataMutuo = isCartaMutuo && cartaMutuoDatos;
+                      const isCompleted = isCartaMutuo ? (doc || hasDataMutuo) : !!doc;
+
                       return (
                         <div 
                           key={item.tipo}
-                          onClick={() => { if (!doc) item.ref.current?.click() }}
+                          onClick={() => { 
+                            if (!isCompleted) {
+                              if (!isCartaMutuo) {
+                                item.ref.current?.click();
+                              }
+                            }
+                          }}
                           className={`relative p-5 rounded-2xl border-2 border-dashed transition-all flex flex-col items-center justify-center text-center
-                            ${uploadingSpec === item.tipo ? 'bg-indigo-50 border-indigo-200' : (doc ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-300 hover:border-indigo-400 hover:shadow-md cursor-pointer')}
+                            ${uploadingSpec === item.tipo ? 'bg-indigo-50 border-indigo-200' : (isCompleted ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-300 hover:border-indigo-400 hover:shadow-md cursor-pointer')}
                           `}
                         >
                           <input type="file" ref={item.ref} onChange={(e) => handleSpecialUpload(e, item.tipo, setUploadingSpec, item.ref)} className="hidden" accept=".pdf,.jpeg,.jpg,.png" />
-                          {uploadingSpec === item.tipo ? (
+                          {uploadingSpec === item.tipo || (isCartaMutuo && isConsultingMutuo) ? (
                             <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-3" />
                           ) : (
-                            <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-colors ${doc ? 'bg-green-100 text-green-600' : 'bg-indigo-100 text-indigo-600'}`}>
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-colors ${isCompleted ? 'bg-green-100 text-green-600' : 'bg-indigo-100 text-indigo-600'}`}>
                               <Icon className="w-5 h-5" />
                             </div>
                           )}
                           
                           <p className="text-sm font-bold text-slate-800">{item.tipo}</p>
-                          <p className="text-[10px] text-slate-500 mt-1 px-2 truncate w-full" title={doc ? doc.usuario_email : undefined}>{doc ? `${doc.usuario_email || 'Usuario'} • ${format(new Date(doc.created_at), "dd/MM/yyyy HH:mm")}` : item.desc}</p>
+                          <p className="text-[10px] text-slate-500 mt-1 px-2 truncate w-full" title={doc ? doc.usuario_email : undefined}>{doc ? `${doc.usuario_email || 'Usuario'} • ${format(new Date(doc.created_at), "dd/MM/yyyy HH:mm")}` : (hasDataMutuo ? 'Datos obtenidos desde Google Sheet' : item.desc)}</p>
+                          
+                          {isCartaMutuo && !isCompleted && !isConsultingMutuo && (
+                            <div className="flex flex-col gap-2 w-full mt-4">
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); item.ref.current?.click(); }}
+                                className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 transition-colors"
+                              >
+                                Adjuntar Archivo
+                              </button>
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleConsultarMutuoCredito(); }}
+                                className="w-full py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg border border-slate-300 transition-colors"
+                              >
+                                Consultar a Reportería Amicar
+                              </button>
+                            </div>
+                          )}
+
+                          {isCartaMutuo && hasDataMutuo && !doc && (
+                            <div className="w-full mt-4 flex flex-col items-center justify-center border-t border-slate-100 pt-3">
+                              <div className="text-xs text-left w-full bg-white p-3 rounded-lg border border-slate-200 shadow-sm mb-3">
+                                <p className="font-semibold text-slate-800 mb-1 border-b border-slate-100 pb-1">Datos Extraídos:</p>
+                                <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] text-slate-600">
+                                  <span className="font-medium text-slate-500">ID Crédito:</span> <span className="truncate" title={cartaMutuoDatos["ID Crédito"]}>{cartaMutuoDatos["ID Crédito"]}</span>
+                                  <span className="font-medium text-slate-500">Marca:</span> <span className="truncate" title={cartaMutuoDatos["Marca"]}>{cartaMutuoDatos["Marca"]}</span>
+                                  <span className="font-medium text-slate-500">Modelo:</span> <span className="truncate" title={cartaMutuoDatos["Modelo"]}>{cartaMutuoDatos["Modelo"]}</span>
+                                  <span className="font-medium text-slate-500">Version:</span> <span className="truncate" title={cartaMutuoDatos["Version"]}>{cartaMutuoDatos["Version"]}</span>
+                                  <span className="font-medium text-slate-500">Entidad:</span> <span className="truncate" title={cartaMutuoDatos["Entidad Financiera"]}>{cartaMutuoDatos["Entidad Financiera"]}</span>
+                                  <span className="font-medium text-slate-500">Fec. Adj.:</span> <span className="truncate" title={cartaMutuoDatos["Fec. Adj."]}>{cartaMutuoDatos["Fec. Adj."]}</span>
+                                  <span className="font-medium text-slate-500">Tipo Crédito:</span> <span className="truncate" title={cartaMutuoDatos["Tipo Crédito"]}>{cartaMutuoDatos["Tipo Crédito"]}</span>
+                                  <span className="font-medium text-slate-500">Producto:</span> <span className="truncate" title={cartaMutuoDatos["Nombre Producto"]}>{cartaMutuoDatos["Nombre Producto"]}</span>
+                                  <span className="font-medium text-slate-500">Saldo:</span> <span className="truncate" title={cartaMutuoDatos["Saldo"]}>{cartaMutuoDatos["Saldo"]}</span>
+                                  <span className="font-medium text-slate-500">Vendedor:</span> <span className="truncate" title={cartaMutuoDatos["Vendedor"]}>{cartaMutuoDatos["Vendedor"]}</span>
+                                  <span className="font-medium text-slate-500">F&I:</span> <span className="truncate" title={cartaMutuoDatos["F&I"]}>{cartaMutuoDatos["F&I"]}</span>
+                                </div>
+                              </div>
+                              <div className="flex gap-2 w-full mt-2">
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); item.ref.current?.click(); }}
+                                  className="flex-1 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-lg border border-indigo-200 transition-colors flex items-center justify-center gap-1"
+                                >
+                                  <Paperclip className="w-3 h-3" /> Adjuntar Archivo
+                                </button>
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleConsultarMutuoCredito(); }}
+                                  className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-bold rounded-lg border border-slate-200 transition-colors flex items-center justify-center gap-1"
+                                >
+                                  <RefreshCw className="w-3 h-3" /> Volver a Consultar
+                                </button>
+                              </div>
+                            </div>
+                          )}
                           
                           {doc && (
                             <div className="flex flex-col gap-2 mt-4 items-center w-full justify-center">
@@ -2199,7 +2378,7 @@ export default function CarpetaClient({ negocio }: Props) {
                             </div>
                           )}
 
-                          {doc && (
+                          {isCompleted && (
                             <span className="absolute top-3 right-12 flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-green-700 shadow-sm">
                               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
                             </span>

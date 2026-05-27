@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { X, Save, AlertCircle, Search, RefreshCw, Check } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
+import { buscarPorInterno } from "@/utils/stockNuevos";
 
 // Sub-componente para botones Sí/No (Visual)
 const YesNoToggle = ({ label, name, onChange }: { label: string, name: string, onChange?: (val: boolean) => void }) => {
@@ -91,51 +92,25 @@ export default function NuevoNegocioModal({ onClose, onSuccess }: Props) {
     setErrorMsg("");
     
     try {
-      // Buscar el interno en la tabla stock_nuevos
-      const { data, error } = await supabase
-        .from("stock_nuevos")
-        .select("*")
-        .eq("INTERNO", interno)
-        .limit(1)
-        .single();
-        
-      if (error) {
-        // Podría no existir, probamos también con interno en minúscula por seguridad
-        const { data: dataLower, error: errorLower } = await supabase
-          .from("stock_nuevos")
-          .select("*")
-          .eq("interno", interno)
-          .limit(1)
-          .single();
-          
-        if (errorLower) {
-          setErrorMsg(`No se encontró el interno ${interno} en stock_nuevos.`);
-          setIsSearching(false);
-          return;
-        }
-        
-        setVehiculoData({
-          chasis: dataLower["N° DE CHASIS"] || dataLower["numero_chasis"] || dataLower["chasis"] || "",
-          marca: dataLower["MARCA"] || dataLower["marca"] || "",
-          codigo_modelo: dataLower["MOD. VEHÍCULO"] || dataLower["mod._vehiculo"] || dataLower["codigo_modelo"] || "",
-          modelo: dataLower["DESCRIPCIÓN MODELO"] || dataLower["modelo"] || "",
-          color: dataLower["COLOR"] || dataLower["color"] || "",
-          anio: dataLower["AÑO"] || dataLower["anio"] || ""
-        });
-      } else if (data) {
-        // Encontrado directo
-        setVehiculoData({
-          chasis: data["N° DE CHASIS"] || data["numero_chasis"] || data["chasis"] || "",
-          marca: data["MARCA"] || data["marca"] || "",
-          codigo_modelo: data["MOD. VEHÍCULO"] || data["mod._vehiculo"] || data["codigo_modelo"] || "",
-          modelo: data["DESCRIPCIÓN MODELO"] || data["modelo"] || "",
-          color: data["COLOR"] || data["color"] || "",
-          anio: data["AÑO"] || data["anio"] || ""
-        });
+      const vehiculo = await buscarPorInterno(interno);
+      
+      if (!vehiculo) {
+        setErrorMsg(`No se encontró el interno ${interno} en Google Sheets.`);
+        setIsSearching(false);
+        return;
       }
+      
+      setVehiculoData({
+        chasis: vehiculo["N° DE CHASIS"] || "",
+        marca: vehiculo.MARCA || "",
+        codigo_modelo: vehiculo["MOD. VEHÍCULO"] || "",
+        modelo: vehiculo["DESCRIPCIÓN MODELO"] || "",
+        color: vehiculo.COLOR || "",
+        anio: vehiculo.AÑO || ""
+      });
     } catch (err: any) {
       console.error(err);
-      setErrorMsg("Error consultando stock_nuevos. Verifica que la tabla exista con las columnas requeridas.");
+      setErrorMsg("Error consultando stock desde Google Sheets.");
     }
 
     setIsSearching(false);
@@ -250,7 +225,7 @@ export default function NuevoNegocioModal({ onClose, onSuccess }: Props) {
             <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
               <div className="flex items-center mb-4">
                 <Search className="w-4 h-4 mr-2 text-blue-600" />
-                <h3 className="text-sm font-semibold text-blue-900">Búsqueda Automática en Tabla: stock_nuevos</h3>
+                <h3 className="text-sm font-semibold text-blue-900">Búsqueda Automática en Google Sheets</h3>
               </div>
               
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

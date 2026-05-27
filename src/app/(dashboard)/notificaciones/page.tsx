@@ -16,9 +16,11 @@ export default async function NotificacionesPage() {
         pedido_venta, 
         usuario_nombre, 
         comentario,
-        created_at
+        created_at,
+        negocios!inner(vendedor_nombre)
       `)
       .neq('usuario_email', user.email)
+      .eq('negocios.vendedor_nombre', user.email)
       .order('created_at', { ascending: false })
       .limit(300);
 

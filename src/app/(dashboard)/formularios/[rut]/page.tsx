@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, Save, Loader2, RefreshCcw, FileText, Calculator } from "lucide-react";
 import React from "react";
 import CalculoPapeles from "./CalculoPapeles";
+import { buscarPorModelo } from "@/utils/stockNuevos";
 
 export default function CalculadoraFormPage(props: { params: Promise<{ rut: string }> }) {
   const params = React.use(props.params);
@@ -139,16 +140,11 @@ export default function CalculadoraFormPage(props: { params: Promise<{ rut: stri
     const fetchVehiculo = async () => {
       // Intenta buscar si el código tiene al menos 2 caracteres
       if (form.mod_vehiculo && form.mod_vehiculo.trim().length >= 2) {
-        const { data, error } = await supabase
-          .from("stock_nuevos")
-          .select("*")
-          .eq('"MOD. VEHÍCULO"', form.mod_vehiculo.trim())
-          .limit(1);
+        const match = await buscarPorModelo(form.mod_vehiculo.trim());
         
-        if (data && data.length > 0 && !error) {
-          const match = data[0];
+        if (match) {
           setForm(prev => {
-            const newMarca = match["MARCA"] || prev.marca;
+            const newMarca = match.MARCA || prev.marca;
             const newDesc = match["DESCRIPCIÓN MODELO"] || prev.descripcion_modelo;
             if (prev.marca === newMarca && prev.descripcion_modelo === newDesc) {
               return prev;
