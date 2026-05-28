@@ -37,6 +37,10 @@ export async function fetchStockNuevos(): Promise<VehiculoStock[]> {
       Papa.parse<VehiculoStock>(csvText, {
         header: true,
         skipEmptyLines: true,
+        transformHeader: (header, index) => {
+          if (index === 1) return 'MARCA'; // The 2nd column is always MARCA, even if the header is wrongly named in the CSV
+          return header;
+        },
         complete: (results) => {
           stockCache = results.data;
           lastFetchTime = Date.now();
