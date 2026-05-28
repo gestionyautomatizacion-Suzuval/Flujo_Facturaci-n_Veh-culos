@@ -42,15 +42,7 @@ function CapturaFirmaForm() {
     if (clean.length <= 1) return clean;
     const body = clean.slice(0, -1);
     const dv = clean.slice(-1);
-    let formatted = "";
-    for (let i = body.length - 1, j = 0; i >= 0; i--, j++) {
-      formatted = body.charAt(i) + formatted;
-      if (j === 2 && i > 0) {
-        formatted = "." + formatted;
-        j = -1;
-      }
-    }
-    return `${formatted}-${dv}`;
+    return `${body}-${dv}`;
   };
 
   const validateRut = (rutStr: string) => {
@@ -89,16 +81,16 @@ function CapturaFirmaForm() {
     const supabase = createClient();
     try {
       // 1. Subir Foto Frontal
-      const frontalExt = frontalFile.name.split('.').pop();
-      const frontalPath = `capturas/${Date.now()}_front_${rut.replace(/[^0-9kK]/g, '')}.${frontalExt}`;
+      const fExt = frontalFile.type.includes('png') ? 'png' : 'jpg';
+      const frontalPath = `capturas/${Date.now()}_front_${rut.replace(/[^0-9kK]/g, '')}.${fExt}`;
       const { error: fError } = await supabase.storage.from("firmas").upload(frontalPath, frontalFile);
-      if (fError) throw new Error("Error al subir carnet frontal.");
+      if (fError) throw new Error(`Error Frontal: ${fError.message}`);
 
       // 2. Subir Foto Trasera
-      const traseroExt = traseroFile.name.split('.').pop();
-      const traseroPath = `capturas/${Date.now()}_back_${rut.replace(/[^0-9kK]/g, '')}.${traseroExt}`;
+      const tExt = traseroFile.type.includes('png') ? 'png' : 'jpg';
+      const traseroPath = `capturas/${Date.now()}_back_${rut.replace(/[^0-9kK]/g, '')}.${tExt}`;
       const { error: tError } = await supabase.storage.from("firmas").upload(traseroPath, traseroFile);
-      if (tError) throw new Error("Error al subir carnet trasero.");
+      if (tError) throw new Error(`Error Trasero: ${tError.message}`);
 
       // 3. Obtener Firma y subir
       const firmaDataUrl = sigCanvas.current.getTrimmedCanvas().toDataURL('image/png');
@@ -106,7 +98,7 @@ function CapturaFirmaForm() {
       const firmaBlob = await firmaRes.blob();
       const firmaPath = `capturas/${Date.now()}_firma_${rut.replace(/[^0-9kK]/g, '')}.png`;
       const { error: sigError } = await supabase.storage.from("firmas").upload(firmaPath, firmaBlob, { contentType: 'image/png' });
-      if (sigError) throw new Error("Error al subir la firma electrónica.");
+      if (sigError) throw new Error(`Error Firma: ${sigError.message}`);
 
       // 4. Guardar en Base de Datos
       const { data: frontUrlData } = supabase.storage.from("firmas").getPublicUrl(frontalPath);
@@ -166,7 +158,7 @@ function CapturaFirmaForm() {
               required
               value={rut}
               onChange={(e) => setRut(formatRut(e.target.value))}
-              placeholder="12.345.678-9"
+              placeholder="12345678-9"
               className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-lg"
             />
           </div>
