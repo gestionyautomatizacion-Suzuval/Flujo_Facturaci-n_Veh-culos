@@ -12,7 +12,8 @@ import {
   MessageSquare, 
   Settings,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  FileSignature
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -95,6 +96,7 @@ export default function Sidebar() {
     { name: "Inicio - Dashboard", href: "/", icon: LayoutDashboard },
     { name: "Calcular Valores", href: "/formularios", icon: CarFront },
     { name: "Flujo de Negocios", href: "/negocios", icon: KanbanSquare },
+    { name: "Firmas Digitales", href: "/firmas", icon: FileSignature },
     { name: "Chat / Contactos", href: "/chats", icon: MessageSquare, hasBadge: hasUnreadChat },
   ];
 
