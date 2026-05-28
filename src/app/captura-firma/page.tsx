@@ -152,18 +152,6 @@ function CapturaFirmaForm() {
           )}
 
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">RUT Completo</label>
-            <input
-              type="text"
-              required
-              value={rut}
-              onChange={(e) => setRut(formatRut(e.target.value))}
-              placeholder="12345678-9"
-              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-lg"
-            />
-          </div>
-
-          <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Correo del Vendedor</label>
             <input
               type="email"
@@ -173,6 +161,18 @@ function CapturaFirmaForm() {
               placeholder="correo@suzuval.cl"
               readOnly={!!vendedorQuery} // Lock if it came from URL
               className={`w-full px-4 py-3 border rounded-xl transition-colors text-slate-700 ${vendedorQuery ? 'bg-slate-100 border-slate-200' : 'bg-white border-slate-300 focus:ring-2 focus:ring-blue-500'}`}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">RUT Completo</label>
+            <input
+              type="text"
+              required
+              value={rut}
+              onChange={(e) => setRut(formatRut(e.target.value))}
+              placeholder="12345678-9"
+              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-lg"
             />
           </div>
 
