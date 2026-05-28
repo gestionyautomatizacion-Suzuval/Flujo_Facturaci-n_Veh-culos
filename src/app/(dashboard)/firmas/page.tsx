@@ -29,8 +29,12 @@ export default function FirmasDigitalesPage() {
   useEffect(() => {
     const initData = async () => {
       const { data: userData } = await supabase.auth.getUser();
+      let email = null;
+      let role = null;
+      
       if (userData?.user?.email) {
-        setUserEmail(userData.user.email);
+        email = userData.user.email;
+        setUserEmail(email);
         
         const { data: perfil } = await supabase
           .from('perfiles')
@@ -39,22 +43,29 @@ export default function FirmasDigitalesPage() {
           .single();
           
         if (perfil) {
-          setUserRole(perfil.rol);
+          role = perfil.rol;
+          setUserRole(role);
         }
       }
       
-      fetchRegistros();
+      fetchRegistros(role, email);
     };
     initData();
   }, []);
 
-  const fetchRegistros = async () => {
+  const fetchRegistros = async (role: string | null, email: string | null) => {
     setLoading(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from("copia_firmas")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(50);
+      
+    if (role === "VENDEDOR" && email) {
+      query = query.eq("correo_vendedor", email);
+    }
+      
+    const { data, error } = await query;
       
     if (!error && data) {
       setRegistros(data);
