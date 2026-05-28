@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, Suspense } from "react";
 import SignatureCanvas from "react-signature-canvas";
 import { createClient } from "@/utils/supabase/client";
 import { Camera, RefreshCcw, CheckCircle, AlertTriangle, Loader2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function CapturaFirmaPage() {
+function CapturaFirmaForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const vendedorQuery = searchParams.get("vendedor") || "";
@@ -270,5 +270,18 @@ export default function CapturaFirmaPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function CapturaFirmaPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-6 text-center">
+        <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+        <h2 className="text-lg font-semibold text-slate-700">Cargando formulario...</h2>
+      </div>
+    }>
+      <CapturaFirmaForm />
+    </Suspense>
   );
 }
