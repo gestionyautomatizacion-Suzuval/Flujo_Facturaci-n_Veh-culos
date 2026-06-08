@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { ChevronLeft, ChevronRight, MessageSquare, Paperclip, Send, File, Image as ImageIcon, UploadCloud, Download, Loader2, Eye, X, AlertTriangle, ExternalLink, Check, Trash2, FileSignature, Calendar, RefreshCw, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, MessageSquare, Paperclip, Send, File, Image as ImageIcon, UploadCloud, Download, Loader2, Eye, X, AlertTriangle, ExternalLink, Check, Trash2, FileSignature, Calendar, RefreshCw, Activity, Star, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { createClient } from "@/utils/supabase/client";
@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { Negocio } from "@/components/KanbanBoard";
 import CuadraturaSection from "./CuadraturaSection";
+import DatosClienteTab from "./DatosClienteTab";
 import { todasLasComunas, obtenerRegionPorComuna, regionesYcomunas } from "@/lib/chile";
 import Papa from "papaparse";
 
@@ -29,19 +30,33 @@ interface DocumentoInterno {
   usuario_email?: string;
   es_firmado?: boolean;
   is_global?: boolean;
-  ctrl_ventas_estado?: string | null;
-  ctrl_ventas_por?: string | null;
-  ctrl_ventas_en?: string | null;
+  tipo_documento?: string;
 }
 
 interface Props {
   negocio: Negocio;
 }
 
+function mapTipo(tipo: string): string {
+  switch (tipo) {
+    case 'Nota de Venta': return 'NOTA_VENTA';
+    case 'Carnet Identidad Cliente': return 'CARNET_IDENTIDAD';
+    case 'Aporte Marca Z126': return 'APORTE_MARCA';
+    case 'Carta Mutuo Crédito': return 'CARTA_MUTUO';
+    case 'Retoma Auto Usado': return 'RETOMA_USADO';
+    case 'RNVM': return 'RNVM';
+    case 'MPP': return 'MPP';
+    case 'PEP_PERSONA': return 'PEP_PERSONA';
+    case 'PEP_EMPRESA': return 'PEP_EMPRESA';
+    case 'DJBF': return 'DJBF';
+    case 'Factura': return 'FACTURA';
+    default: return 'OTRO';
+  }
+}
+
 export default function CarpetaClient({ negocio }: Props) {
   const router = useRouter();
-  const [rightActiveTab, setRightActiveTab] = useState<"requeridos" | "cliente" | "valores" | "archivos" | "firmados" | "historial">("requeridos");
-  const [leftActiveTab, setLeftActiveTab] = useState<"chat">("chat");
+  const [rightActiveTab, setRightActiveTab] = useState<"requeridos" | "cliente" | "archivos" | "firmados" | "historial">("requeridos");
   const [comentarios, setComentarios] = useState<Comentario[]>([]);
   const [docs, setDocs] = useState<DocumentoInterno[]>([]);
   
@@ -53,8 +68,7 @@ export default function CarpetaClient({ negocio }: Props) {
   const [uploadingSpec, setUploadingSpec] = useState<string | null>(null); // 'nota_venta' o 'carnet'
   const [userEmail, setUserEmail] = useState("");
   const [userRole, setUserRole] = useState("VENDEDOR");
-  const [firmaJefaturaNV, setFirmaJefaturaNV] = useState((negocio as any).firma_jefatura_nv || null);
-  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(true);
   
   const [cartaMutuoDatos, setCartaMutuoDatos] = useState<any>((negocio as any).carta_mutuo_datos || null);
   const [isConsultingMutuo, setIsConsultingMutuo] = useState(false);
@@ -74,17 +88,7 @@ export default function CarpetaClient({ negocio }: Props) {
   useEffect(() => {
     userEmailRef.current = userEmail;
   }, [userEmail]);
-  const [ctrlVentas, setCtrlVentas] = useState({
-    vehiculo: (negocio as any).ctrl_ventas_vehiculo || null as string | null,
-    observaciones: (negocio as any).ctrl_ventas_observaciones || null as string | null,
-    cuadratura: (negocio as any).ctrl_ventas_cuadratura || null as string | null,
-    cliente: (negocio as any).ctrl_ventas_cliente || null as string | null,
-    firma: (negocio as any).ctrl_ventas_firma || null as string | null,
-    por: (negocio as any).ctrl_ventas_por || null as string | null,
-    en: (negocio as any).ctrl_ventas_en || null as string | null,
-  });
-  const [cvPopupKey, setCvPopupKey] = useState<string | null>(null);
-  const [isStartingRevision, setIsStartingRevision] = useState(false);
+
   
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [editDocName, setEditDocName] = useState("");
@@ -102,52 +106,16 @@ export default function CarpetaClient({ negocio }: Props) {
   const cartaMutuoInputRef = useRef<HTMLInputElement>(null);
   const retomaInputRef = useRef<HTMLInputElement>(null);
   const facturaInputRef = useRef<HTMLInputElement>(null);
-  const chatFileInputRef = useRef<HTMLInputElement>(null);
   const firmadoInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
   
-  const [extractedCliente, setExtractedCliente] = useState<any>(null);
-  const [isExtractingCliente, setIsExtractingCliente] = useState(false);
-  const [isEditingCliente, setIsEditingCliente] = useState(false);
-  const [manualCliente, setManualCliente] = useState<any>({});
+  const [linkedClienteInfo, setLinkedClienteInfo] = useState<{id: string, rut: string, nombre_apellido: string} | null>(null);
   
   const [firmaDigitalData, setFirmaDigitalData] = useState<any>(null);
   const [isLoadingFirmaDigital, setIsLoadingFirmaDigital] = useState(false);
 
-  const [extraData, setExtraData] = useState({
-    contribuyente_electronico: (negocio as any).contribuyente_electronico || "",
-    tipo_negocio: (negocio as any).tipo_negocio || "",
-    estado_civil: (negocio as any).estado_civil || "",
-    comunidad_bienes: (negocio as any).comunidad_bienes || "",
-    nacionalidad: (negocio as any).nacionalidad || "",
-    profesion_giro: (negocio as any).profesion_giro || ""
-  });
 
-  const [valoresNegocio, setValoresNegocio] = useState({
-    precio_lista: (negocio as any).precio_lista || 0,
-    bono_marca: (negocio as any).bono_marca || 0,
-    bono_amicar_suzuval: (negocio as any).bono_amicar_suzuval || 0,
-    bono_amicar_inchcape: (negocio as any).bono_amicar_inchcape || 0,
-    flete_grabado: (negocio as any).flete_grabado ?? 181000,
-    venta_accesorios_mantencion: (negocio as any).venta_accesorios_mantencion || 0,
-    mantencion_10000: (negocio as any).mantencion_10000 || 0,
-    mantencion_20000: (negocio as any).mantencion_20000 || 0,
-    mantencion_30000: (negocio as any).mantencion_30000 || 0
-  });
-
-  const [valoresTab, setValoresTab] = useState<"negocio" | "papeles">("negocio");
-  const [anioUtm] = useState<number>(new Date().getFullYear());
-  const [utmData, setUtmData] = useState<Record<number, any>>({});
-  const [loadingUtm, setLoadingUtm] = useState(true);
-  const [mesFacturaA, setMesFacturaA] = useState<number>(new Date().getMonth() + 1);
-  const [mesFacturaB, setMesFacturaB] = useState<number>(9);
-  const [selloVerde, setSelloVerde] = useState<number>(4000);
-  const [inscripcion, setInscripcion] = useState<number>(89560);
-  const [permisoCirculacion, setPermisoCirculacion] = useState<number>(0);
-  const [seguroObligatorio, setSeguroObligatorio] = useState<number>(33000);
-  const [impuestoVerde, setImpuestoVerde] = useState<number>(0);
-  const [facturarProximoMes, setFacturarProximoMes] = useState<string>("NO");
 
   const [pepOpciones, setPepOpciones] = useState({
     personaStatus: "NO ser una Persona Políticamente Expuesta (PEP)",
@@ -156,48 +124,29 @@ export default function CarpetaClient({ negocio }: Props) {
     empresaVinculo: "NO tener vínculo alguno"
   });
 
-  const handleValoresChange = (field: string, value: string) => {
-    const numValue = value.replace(/\D/g, '');
-    setValoresNegocio(prev => ({ ...prev, [field]: Number(numValue) }));
-  };
 
-  const logAuditoria = async (detalles: string) => {
-    const nombreExtraido = userEmail.split("@")[0] || "Sistema";
-    const comentarioEspecial = `[AUDITORIA]|${detalles}`;
-    
-    const { data: chatData } = await supabase
-      .from("negocios_comentarios")
+  const [historial, setHistorial] = useState<any[]>([]);
+  const [validaciones, setValidaciones] = useState<any[]>([]);
+
+  const logAuditoria = async (detalles: string, tipo_evento: string = 'SISTEMA') => {
+    const { data: histData } = await supabase
+      .from("negocios_historial")
       .insert([{
         pedido_venta: negocio.pedido_venta,
-        usuario_nombre: nombreExtraido,
-        usuario_email: userEmail || "sistema@suzuval.cl",
-        comentario: comentarioEspecial
+        tipo_evento: tipo_evento,
+        descripcion: detalles,
+        usuario_email: userEmail || "sistema@suzuval.cl"
       }])
       .select()
       .single();
 
-    if (chatData) {
-      setComentarios(prev => [...prev, chatData]);
+    if (histData) {
+      setHistorial(prev => [histData, ...prev]);
     }
   };
 
-  const handleValoresSave = async (field: string, value: number) => {
-    const { error } = await supabase.from('negocios').update({ [field]: value }).eq('pedido_venta', negocio.pedido_venta);
-    if (error) console.error("Error auto-saving valores data:", error);
-  };
-
-  const handleExtraDataChange = (field: string, value: string) => {
-    setExtraData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleExtraDataSave = async (field: string, value: string) => {
-    const { error } = await supabase.from('negocios').update({ [field]: value }).eq('pedido_venta', negocio.pedido_venta);
-    if (error) console.error("Error auto-saving extra data:", error);
-  };
-
   const fetchFirmaDigital = useCallback(async () => {
-    const cli = extractedCliente || (negocio as any).cliente || negocio || {};
-    const rutStr = manualCliente.rut || cli.rut || (negocio as any).rut;
+    const rutStr = linkedClienteInfo?.rut || (negocio as any).rut;
     
     if (!rutStr) {
       setFirmaDigitalData(null);
@@ -206,10 +155,9 @@ export default function CarpetaClient({ negocio }: Props) {
     
     setIsLoadingFirmaDigital(true);
     const { data, error } = await supabase
-      .from('copia_firmas')
-      .select('*')
+      .from('clientes')
+      .select('firma, ci_frontal, ci_trasero, autorizacion, updated_at')
       .eq('rut', rutStr)
-      .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
       
@@ -219,7 +167,7 @@ export default function CarpetaClient({ negocio }: Props) {
       setFirmaDigitalData(null);
     }
     setIsLoadingFirmaDigital(false);
-  }, [negocio, extractedCliente, manualCliente.rut]);
+  }, [negocio, linkedClienteInfo]);
 
   useEffect(() => {
     fetchFirmaDigital();
@@ -236,20 +184,6 @@ export default function CarpetaClient({ negocio }: Props) {
       }
     });
 
-    async function fetchUtm() {
-      setLoadingUtm(true);
-      const { data, error } = await supabase
-        .from("parametros_sii")
-        .select("anio, mes, utm")
-        .eq("anio", anioUtm);
-      if (!error && data) {
-        const map: Record<number, any> = {};
-        data.forEach((r: any) => { map[r.mes] = r; });
-        setUtmData(map);
-      }
-      setLoadingUtm(false);
-    }
-    fetchUtm();
 
     const initData = async () => {
       const resChats = await supabase
@@ -274,6 +208,25 @@ export default function CarpetaClient({ negocio }: Props) {
         setDocs(resDocs.data);
       }
       setLoadingDocs(false);
+
+      const resValidaciones = await supabase
+        .from("negocios_validaciones")
+        .select("*")
+        .eq("pedido_venta", negocio.pedido_venta);
+      
+      if (!resValidaciones.error && resValidaciones.data) {
+        setValidaciones(resValidaciones.data);
+      }
+
+      const resHistorial = await supabase
+        .from("negocios_historial")
+        .select("*")
+        .eq("pedido_venta", negocio.pedido_venta)
+        .order("created_at", { ascending: false });
+        
+      if (!resHistorial.error && resHistorial.data) {
+        setHistorial(resHistorial.data);
+      }
     };
 
     initData();
@@ -294,9 +247,37 @@ export default function CarpetaClient({ negocio }: Props) {
             return [...prev, newComentario];
           });
           setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-          if (["ADMIN", "ADMINISTRATIVO"].includes(userRoleRef.current)) {
-            // Notifications are now handled globally in the KanbanBoard
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "negocios_validaciones",
+          filter: `pedido_venta=eq.${negocio.pedido_venta}`
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            setValidaciones(prev => {
+              const updated = prev.filter(v => v.elemento_id !== payload.new.elemento_id);
+              return [...updated, payload.new];
+            });
+          } else if (payload.eventType === 'DELETE') {
+            setValidaciones(prev => prev.filter(v => v.elemento_id !== payload.old.elemento_id));
           }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "negocios_historial",
+          filter: `pedido_venta=eq.${negocio.pedido_venta}`
+        },
+        (payload) => {
+          setHistorial(prev => [payload.new, ...prev]);
         }
       )
       .subscribe();
@@ -306,11 +287,92 @@ export default function CarpetaClient({ negocio }: Props) {
     };
   }, [negocio.pedido_venta]);
 
+  useEffect(() => {
+    const checkAllApproved = async () => {
+      if (negocio.estado === 'FACTURADO') return;
+
+      const notaVentaDoc = docs.find(d => d.tipo_documento === 'NOTA_VENTA');
+      
+      const requiredIds = [
+        'DATOS_VEHICULO',
+        'OBSERVACIONES_VENTA',
+        'CUADRATURA',
+        'DATOS_CLIENTE',
+        'FIRMA_DIGITAL'
+      ];
+      
+      if (notaVentaDoc) requiredIds.push(notaVentaDoc.id);
+
+      const allApproved = !!notaVentaDoc && requiredIds.every(id => 
+        validaciones.some(v => v.elemento_id === id && v.estado === 'APROBADO')
+      );
+
+      const hasAnyValidation = requiredIds.some(id => 
+        validaciones.some(v => v.elemento_id === id && (v.estado === 'APROBADO' || v.estado === 'RECHAZADO'))
+      );
+
+      let targetStatus: string | null = null;
+      let auditMsg: string | null = null;
+
+      if (allApproved) {
+        targetStatus = 'REVISADO_OK';
+        auditMsg = "Estado del negocio cambiado automáticamente a OK Revisado por aprobaciones completas";
+      } else if (hasAnyValidation) {
+        targetStatus = 'REVISADO_EN_ESPERA';
+        auditMsg = "Estado del negocio cambiado automáticamente a En Revisión";
+      } else {
+        targetStatus = 'PARA_REVISION';
+        auditMsg = "Estado del negocio regresado automáticamente a Pendiente Revisión";
+      }
+
+      let currentNormalized = negocio.estado;
+      if (currentNormalized === 'APROBADO' || currentNormalized === 'REVISADO OK') currentNormalized = 'REVISADO_OK';
+      if (currentNormalized === 'PARA_REVISIÓN') currentNormalized = 'PARA_REVISION';
+
+      if (targetStatus && currentNormalized !== targetStatus) {
+        const { error } = await supabase
+          .from('negocios')
+          .update({ estado: targetStatus })
+          .eq('pedido_venta', negocio.pedido_venta);
+
+        if (!error) {
+          if (auditMsg) logAuditoria(auditMsg);
+          router.refresh();
+        }
+      }
+    };
+
+    checkAllApproved();
+  }, [validaciones, docs, negocio.estado, negocio.pedido_venta, router, supabase]);
+
+  const fetchClientDataForDocs = async () => {
+    const { data: cdn } = await supabase
+      .from("clientes_datos_negocios")
+      .select("*")
+      .eq("pedido_venta", negocio.pedido_venta)
+      .maybeSingle();
+
+    return {
+      rut: linkedClienteInfo?.rut || negocio.rut || '',
+      nombre: linkedClienteInfo?.nombre_apellido || negocio.nombre_apellido || '',
+      direccion: cdn?.direccion || '',
+      comuna: cdn?.comuna || '',
+      region: cdn?.region || '',
+      correo: cdn?.mail || '',
+      telefono: cdn?.movil || '',
+      estado_civil: cdn?.estado_civil || '',
+      comunidad_bienes: cdn?.comunidad_bienes ? 'SI' : 'NO',
+      tipo_negocio: cdn?.tipo_negocio || '',
+      nacionalidad: cdn?.nacionalidad || '',
+      profesion_giro: cdn?.profesion_giro || '',
+    };
+  };
+
   const handleConsultarMutuoCredito = async () => {
     setIsConsultingMutuo(true);
     try {
-      const cli = extractedCliente || (negocio as any).cliente || negocio || {};
-      let rut = manualCliente.rut || cli.rut || (negocio as any).rut || '';
+      const clientData = await fetchClientDataForDocs();
+      let rut = clientData.rut;
       
       if (!rut) {
         alert("No se encontró el RUT del cliente para buscar.");
@@ -376,43 +438,16 @@ export default function CarpetaClient({ negocio }: Props) {
     }
   };
 
-  const handleFirmaNV = async (nuevoEstado: string) => {
-    setFirmaJefaturaNV(nuevoEstado);
-    const updateData: any = { firma_jefatura_nv: nuevoEstado };
-    if (nuevoEstado === 'SOLICITADA') {
-        updateData.firma_jefatura_solicitada_por = userEmail;
-        updateData.firma_jefatura_solicitada_en = new Date().toISOString();
-        (negocio as any).firma_jefatura_solicitada_por = updateData.firma_jefatura_solicitada_por;
-        (negocio as any).firma_jefatura_solicitada_en = updateData.firma_jefatura_solicitada_en;
-    } else if (nuevoEstado === 'FIRMADA' || nuevoEstado === 'RECHAZADA') {
-        updateData.firma_jefatura_resuelta_por = userEmail;
-        updateData.firma_jefatura_resuelta_en = new Date().toISOString();
-        (negocio as any).firma_jefatura_resuelta_por = updateData.firma_jefatura_resuelta_por;
-        (negocio as any).firma_jefatura_resuelta_en = updateData.firma_jefatura_resuelta_en;
-    }
 
-    const { error } = await supabase.from('negocios').update(updateData).eq('pedido_venta', negocio.pedido_venta);
-    if (error) {
-       console.error("Error updating firma:", error);
-       alert("Error de conexión al actualizar firma.");
-    } else {
-       logAuditoria(`Se ha cambiado el estado de Firma Jefatura a: ${nuevoEstado}`);
-    }
-  };
 
   const handleGenerateRNVM = async () => {
     try {
       setUploadingSpec('RNVM');
-      const cli = extractedCliente || (negocio as any).cliente || negocio || {};
-      const rut = manualCliente.rut || cli.rut || (negocio as any).rut || '';
-      const nombre = manualCliente.nombre_apellido || cli.nombre_apellido || (negocio as any).nombre_apellido || '';
-      const direccion = manualCliente.direccion_cliente || (cli as any).direccion_cliente || (negocio as any).direccion_cliente || '';
-      const comuna = manualCliente.comuna_cliente || (cli as any).comuna_cliente || (negocio as any).comuna_cliente || '';
-      const region = manualCliente.region_cliente || (cli as any).region_cliente || (negocio as any).region_cliente || '';
-      const correo = manualCliente.mail_cliente || (cli as any).mail_cliente || (negocio as any).mail_cliente || '';
-      const telefono = manualCliente.movil_cliente || (cli as any).movil_cliente || (negocio as any).movil_cliente || '';
+      const clientData = await fetchClientDataForDocs();
+      const { rut, nombre, direccion, comuna, region, correo, telefono } = clientData;
+      const extraData = clientData;
 
-      const url = '/templates/rnvm_template.pdf';
+      const url = `/templates/rnvm_template.pdf?v=${Date.now()}`;
       const response = await fetch(url);
       if(!response.ok) throw new Error("Plantilla no encontrada en public/templates/rnvm_template.pdf. Por favor, asegúrese de que el archivo existe.");
       const existingPdfBytes = await response.arrayBuffer();
@@ -425,43 +460,26 @@ export default function CarpetaClient({ negocio }: Props) {
       const color = rgb(0, 0, 0);
       const pageHeight = firstPage.getHeight();
 
-      // Ajustes de coordenadas estimadas para dibujar los textos
-      
-      // Título (Centrado aprox)
-      firstPage.drawText('FICHA DE CONOCIMIENTO DE CLIENTE', { x: 180, y: pageHeight - 120, size: 13, color });
+      // Ajustes de coordenadas para dibujar los valores EXACTAMENTE al lado de los textos fijos de la plantilla
+      // Estado Civil y Datos Adicionales (Parte superior)
+      firstPage.drawText(extraData.estado_civil || '', { x: 180, y: pageHeight - 150, size, color });
+      firstPage.drawText(extraData.comunidad_bienes || '', { x: 480, y: pageHeight - 150, size, color });
+      firstPage.drawText(extraData.estado_civil === 'AUC' ? 'SI' : 'NO', { x: 200, y: pageHeight - 170, size, color });
+      firstPage.drawText(extraData.tipo_negocio === 'PERSONA NATURAL' ? 'NO' : 'SI', { x: 480, y: pageHeight - 170, size, color });
 
-      // Estado Civil y Datos Adicionales
-      firstPage.drawText(`Estado Civil: ${extraData.estado_civil || ''}`, { x: 80, y: pageHeight - 150, size, color });
-      firstPage.drawText(`Comunidad de Bienes: ${extraData.comunidad_bienes || ''}`, { x: 350, y: pageHeight - 150, size, color });
-      firstPage.drawText(`Acuerdo Unión Civil: ${extraData.estado_civil === 'AUC' ? 'SI' : 'NO'}`, { x: 80, y: pageHeight - 170, size, color });
-      firstPage.drawText(`Cliente Empresa: ${extraData.tipo_negocio === 'CLIENTE EMPRESA' ? 'SI' : 'NO'}`, { x: 350, y: pageHeight - 170, size, color });
-
-      // Leyenda / Advertencia
-      const legendColor = rgb(0.5, 0.5, 0.5);
-      const legendSize = 8;
-      firstPage.drawText('Si hay un Acuerdo de Union Civil adjuntar 2\' Cedula de Identidad y Certificado de Matrimonio. Si rechazo es por Acuerdo de Union', { x: 80, y: pageHeight - 195, size: legendSize, color: legendColor });
-      firstPage.drawText('Civil con Comunidad de bienes, el trámite de solución debe ser realizado por cliente o con un costo de 1,5 UF.', { x: 80, y: pageHeight - 210, size: legendSize, color: legendColor });
-      firstPage.drawText('SOLUCION DEL RECHAZO, GENERARÁ DEMORAS DE 6 O MAS MESES EN OBTENER CAV Y PADRON', { x: 80, y: pageHeight - 225, size: legendSize, color: legendColor });
-
-      // Datos Cliente
-      firstPage.drawText(`Rut: ${rut}`, { x: 80, y: pageHeight - 250, size, color });
-      firstPage.drawText(`Nombre Completo: ${nombre}`, { x: 80, y: pageHeight - 270, size, color });
-      firstPage.drawText(`Nacionalidad: ${extraData.nacionalidad || ''}`, { x: 80, y: pageHeight - 290, size, color });
-      firstPage.drawText(`Profesión o Giro: ${extraData.profesion_giro || ''}`, { x: 80, y: pageHeight - 310, size, color });
+      // Datos Cliente (Columna izquierda alineada en X = 200)
+      const leftX = 200;
+      firstPage.drawText(rut, { x: leftX, y: pageHeight - 250, size, color });
+      firstPage.drawText(nombre, { x: leftX, y: pageHeight - 270, size, color });
+      firstPage.drawText(extraData.nacionalidad || '', { x: leftX, y: pageHeight - 290, size, color });
+      firstPage.drawText(extraData.profesion_giro || '', { x: leftX, y: pageHeight - 310, size, color });
 
       // Dirección
-      firstPage.drawText(`Dirección: ${direccion}`, { x: 80, y: pageHeight - 345, size, color });
-      firstPage.drawText(`Comuna: ${comuna}`, { x: 80, y: pageHeight - 365, size, color });
-      firstPage.drawText(`Región: ${region}`, { x: 350, y: pageHeight - 365, size, color });
-      firstPage.drawText(`Teléfono: ${telefono}`, { x: 80, y: pageHeight - 385, size, color });
-      firstPage.drawText(`Correo Electrónico: ${correo}`, { x: 80, y: pageHeight - 405, size, color });
-
-      // Declaración legal
-      firstPage.drawText('Declaro que mis datos personales indicados precedentemente son los correctos, para los efectos de la inscripción del vehículo', { x: 80, y: pageHeight - 440, size: legendSize, color: legendColor });
-      firstPage.drawText('que estoy adquiriendo, en el Registro Nacional de Vehículos Motorizados.', { x: 80, y: pageHeight - 455, size: legendSize, color: legendColor });
-      firstPage.drawText('Asimismo, declaro conocer que Distribuidora de Vehículos Suzuval SPA ha implementado un Manual de Prevención de Delitos', { x: 80, y: pageHeight - 480, size: legendSize, color: legendColor });
-      firstPage.drawText('conforme a la Ley N° 19.913 para los delitos de lavados de activos, financiamiento de terrorismo y los demás delitos', { x: 80, y: pageHeight - 495, size: legendSize, color: legendColor });
-      firstPage.drawText('precedentes, y conforme a ello, declara que los fondos con los que realiza esta operación provienen de un origen lícito.', { x: 80, y: pageHeight - 510, size: legendSize, color: legendColor });
+      firstPage.drawText(direccion, { x: leftX, y: pageHeight - 345, size, color });
+      firstPage.drawText(comuna, { x: leftX, y: pageHeight - 365, size, color });
+      firstPage.drawText(region, { x: 420, y: pageHeight - 365, size, color });
+      firstPage.drawText(telefono, { x: leftX, y: pageHeight - 385, size, color });
+      firstPage.drawText(correo, { x: leftX, y: pageHeight - 405, size, color });
 
       // Inserción de firma digital si existe
       if (firmaDigitalData) {
@@ -498,15 +516,16 @@ export default function CarpetaClient({ negocio }: Props) {
               if (firmaImage) {
                 let width = firmaImage.width;
                 let height = firmaImage.height;
-                const maxWidth = 200;
-                const maxHeight = 100;
+                const maxWidth = 180;
+                const maxHeight = 70;
                 const ratio = Math.min(maxWidth / width, maxHeight / height);
                 width = width * ratio;
                 height = height * ratio;
 
+                // Colocar la firma centrada y más arriba para que no pise el pie de página
                 firstPage.drawImage(firmaImage, {
-                  x: (firstPage.getWidth() - width) / 2, // Centrado horizontal
-                  y: pageHeight - 620, // Posición ajustada para centrar mejor en el espacio en blanco (más arriba)
+                  x: (firstPage.getWidth() - width) / 2, 
+                  y: pageHeight - 570, 
                   width,
                   height
                 });
@@ -518,12 +537,12 @@ export default function CarpetaClient({ negocio }: Props) {
         }
       }
 
-      // Fecha de generación del documento (recuadro amarillo derecho)
+      // Fecha de generación del documento
       const fechaActual = new Date();
       const fechaFormateada = fechaActual.toLocaleDateString('es-CL');
       firstPage.drawText(`Generado el: ${fechaFormateada}`, { 
-        x: 430, // Alineado lo más posible a la derecha
-        y: pageHeight - 570, // Subimos la altura para que quede alineado al centro de la firma
+        x: 430, 
+        y: pageHeight - 590, 
         size: 9, 
         color: rgb(0.4, 0.4, 0.4) 
       });
@@ -572,19 +591,67 @@ export default function CarpetaClient({ negocio }: Props) {
   const handleGenerateMPP = async () => {
     try {
       setUploadingSpec('MPP');
-      const cli = extractedCliente || (negocio as any).cliente || negocio || {};
-      const rut = manualCliente.rut || cli.rut || (negocio as any).rut || '';
+      const clientData = await fetchClientDataForDocs();
+      const { rut } = clientData;
 
-      const url = '/templates/mpp_template.pdf';
+      // Obtener mantenciones contratadas desde la cuadratura
+      let mantDataFetched = null;
+      if (negocio.cuadratura_id) {
+        const { data: mantData } = await supabase
+          .from("mantencion_prepagada")
+          .select("mantencion_10000, mantencion_20000, mantencion_30000")
+          .eq("cuadratura_id", negocio.cuadratura_id)
+          .maybeSingle();
+          
+        if (mantData) {
+          mantDataFetched = mantData;
+        }
+      }
+
+      const url = `/templates/mpp_template.pdf?v=${Date.now()}`;
       const response = await fetch(url);
       if (!response.ok) throw new Error('Plantilla no encontrada en public/templates/mpp_template.pdf.');
       const existingPdfBytes = await response.arrayBuffer();
 
       const pdfDoc = await PDFDocument.load(existingPdfBytes);
+      const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       const pages = pdfDoc.getPages();
       const firstPage = pages[0];
       const pageHeight = firstPage.getHeight();
       const pageWidth = firstPage.getWidth();
+
+      // Dibujar las mantenciones contratadas verticalmente
+      let hasMantenciones = false;
+      let yOffset = 210;
+      if (mantDataFetched) {
+        if (mantDataFetched.mantencion_10000) {
+          const num = "10.000";
+          const numW = boldFont.widthOfTextAtSize(num, 12);
+          firstPage.drawText(num, { x: 90, y: yOffset, size: 12, font: boldFont, color: rgb(0,0,0) });
+          firstPage.drawText(" KM", { x: 90 + numW + 2, y: yOffset, size: 11, font: boldFont, color: rgb(0,0,0) });
+          yOffset -= 20;
+          hasMantenciones = true;
+        }
+        if (mantDataFetched.mantencion_20000) {
+          const num = "20.000";
+          const numW = boldFont.widthOfTextAtSize(num, 12);
+          firstPage.drawText(num, { x: 90, y: yOffset, size: 12, font: boldFont, color: rgb(0,0,0) });
+          firstPage.drawText(" KM", { x: 90 + numW + 2, y: yOffset, size: 11, font: boldFont, color: rgb(0,0,0) });
+          yOffset -= 20;
+          hasMantenciones = true;
+        }
+        if (mantDataFetched.mantencion_30000) {
+          const num = "30.000";
+          const numW = boldFont.widthOfTextAtSize(num, 12);
+          firstPage.drawText(num, { x: 90, y: yOffset, size: 12, font: boldFont, color: rgb(0,0,0) });
+          firstPage.drawText(" KM", { x: 90 + numW + 2, y: yOffset, size: 11, font: boldFont, color: rgb(0,0,0) });
+          hasMantenciones = true;
+        }
+      }
+      
+      if (!hasMantenciones) {
+        firstPage.drawText("Ninguna", { x: 90, y: 190, size: 12, font: boldFont, color: rgb(0,0,0) });
+      }
 
       // Solo insertar la firma digital si existe
       if (firmaDigitalData) {
@@ -608,13 +675,13 @@ export default function CarpetaClient({ negocio }: Props) {
               catch { firmaImage = await pdfDoc.embedJpg(firmaImageBytes); }
               if (firmaImage) {
                 let w = firmaImage.width, h = firmaImage.height;
-                // Área del rectángulo amarillo: x≈144–388, y≈155–235 (pdf-lib, origen abajo-izq)
-                const boxX = 200, boxY = 155, boxW = 244, boxH = 80;
+                // Mover la firma al centro, pero más arriba
+                const boxW = 180, boxH = 80;
                 const ratio = Math.min(boxW / w, boxH / h);
                 w = w * ratio; h = h * ratio;
                 firstPage.drawImage(firmaImage, {
-                  x: boxX + (boxW - w) / 2,
-                  y: boxY + (boxH - h) / 2,
+                  x: (pageWidth - w) / 2,
+                  y: 200,
                   width: w, height: h
                 });
               }
@@ -623,12 +690,13 @@ export default function CarpetaClient({ negocio }: Props) {
         }
       }
 
-      // Fecha al lado derecho de la firma, parte inferior
+      // Fecha centrada debajo de la firma, más arriba que el pie de página
       const fechaMPP = new Date().toLocaleDateString('es-CL');
-      firstPage.drawText(`Generado el: ${fechaMPP}`, {
-        x: 200 + 244 + 10, // a la derecha del área de firma
-        y: 185,             // un poco más arriba del borde inferior del área de firma
-        size: 8,
+      const dateText = `Generado el: ${fechaMPP}`;
+      firstPage.drawText(dateText, {
+        x: (pageWidth - 125) / 2,
+        y: 180,
+        size: 9,
         color: rgb(0.3, 0.3, 0.3)
       });
 
@@ -672,13 +740,11 @@ export default function CarpetaClient({ negocio }: Props) {
   const handleGeneratePEP = async (tipo: 'PEP_PERSONA' | 'PEP_EMPRESA') => {
     try {
       setUploadingSpec(tipo);
-      const cli = extractedCliente || (negocio as any).cliente || negocio || {};
-      const rut = manualCliente.rut || cli.rut || (negocio as any).rut || '';
-      const nombre = manualCliente.nombre_apellido || cli.nombre_apellido || (negocio as any).nombre_apellido || '';
-      const nacionalidad = (extraData as any)?.nacionalidad || manualCliente.nacionalidad || (cli as any).nacionalidad || '';
+      const clientData = await fetchClientDataForDocs();
+      const { rut, nombre, nacionalidad } = clientData;
 
       const templateName = tipo === 'PEP_PERSONA' ? 'pep_persona_template.pdf' : 'pep_empresas_template.pdf';
-      const response = await fetch(`/templates/${templateName}`);
+      const response = await fetch(`/templates/${templateName}?v=${Date.now()}`);
       if (!response.ok) throw new Error(`Plantilla ${templateName} no encontrada en public/templates/.`);
       const existingPdfBytes = await response.arrayBuffer();
 
@@ -794,7 +860,7 @@ export default function CarpetaClient({ negocio }: Props) {
   const handleGenerateDJBF = async () => {
     try {
       setUploadingSpec('DJBF');
-      const url = '/templates/djbf_template.pdf';
+      const url = `/templates/djbf_template.pdf?v=${Date.now()}`;
       const response = await fetch(url);
       if (!response.ok) throw new Error('Plantilla no encontrada en public/templates/djbf_template.pdf.');
       
@@ -838,122 +904,6 @@ export default function CarpetaClient({ negocio }: Props) {
     }
   };
 
-  const canMarkCV = ['ADMINISTRATIVO', 'ADMIN'].includes(userRole) && !!(negocio as any).primer_admin_email;
-
-  const handleCtrlVentasSec = async (campo: 'vehiculo' | 'observaciones' | 'cuadratura' | 'cliente' | 'firma', valor: string | null) => {
-    const update: Record<string, any> = { [`ctrl_ventas_${campo}`]: valor };
-    const now = new Date().toISOString();
-    if (valor) { update.ctrl_ventas_por = userEmail; update.ctrl_ventas_en = now; }
-    const { error } = await supabase.from('negocios').update(update).eq('pedido_venta', negocio.pedido_venta);
-    if (!error) {
-      setCtrlVentas(prev => ({ 
-        ...prev, 
-        [campo]: valor,
-        ...(valor ? { por: userEmail, en: now } : {})
-      }));
-      logAuditoria(`Control Ventas: ${valor === 'OK' ? 'Aprobado' : valor === 'RECHAZADO' ? 'Rechazado' : 'Marca quitada'} en la sección ${campo.toUpperCase()}`);
-    }
-    setCvPopupKey(null);
-  };
-
-  const handleCtrlVentasDoc = async (docId: string, valor: string | null) => {
-    const update: Record<string, any> = { ctrl_ventas_estado: valor };
-    const now = new Date().toISOString();
-    if (valor) { update.ctrl_ventas_por = userEmail; update.ctrl_ventas_en = now; }
-    const { error } = await supabase.from('negocios_documentos').update(update).eq('id', docId);
-    if (!error) {
-      setDocs(prev => prev.map(d => d.id === docId ? { 
-        ...d, 
-        ctrl_ventas_estado: valor,
-        ...(valor ? { ctrl_ventas_por: userEmail, ctrl_ventas_en: now } : {})
-      } : d));
-      const docName = docs.find(d => d.id === docId)?.nombre_archivo || 'Documento';
-      logAuditoria(`Control Ventas: ${valor === 'OK' ? 'Aprobado' : valor === 'RECHAZADO' ? 'Rechazado' : 'Marca quitada'} en el documento "${docName}"`);
-    }
-    setCvPopupKey(null);
-  };
-
-  const CvSecBadge = ({ campo, valor }: { campo: 'vehiculo' | 'observaciones' | 'cuadratura' | 'cliente' | 'firma'; valor: string | null }) => {
-    const key = `sec_${campo}`;
-    const isOpen = cvPopupKey === key;
-    return (
-      <div className="relative inline-flex items-center ml-3">
-        <button
-          onClick={canMarkCV ? (e) => { e.stopPropagation(); setCvPopupKey(isOpen ? null : key); } : undefined}
-          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded border-2 text-xs font-bold transition-all min-w-[80px] h-[26px] justify-center ${valor === 'OK' ? 'bg-green-500 border-green-600 text-white' : valor === 'RECHAZADO' ? 'bg-red-500 border-red-600 text-white' : (!canMarkCV ? 'bg-slate-100 border-slate-300 text-slate-400' : 'bg-white border-green-400 text-green-600')} ${canMarkCV ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed opacity-80'}`}
-          title={canMarkCV ? 'Control Ventas' : (valor || 'Sin marcar')}
-        >
-          {valor === 'OK' && <><Check className="w-3 h-3" /><span>OK</span></>}
-          {valor === 'RECHAZADO' && <><X className="w-3 h-3" /><span>Rechaz.</span></>}
-        </button>
-        {(valor === 'OK' || valor === 'RECHAZADO') && ctrlVentas.por && ctrlVentas.en && (
-          <span className="ml-2 text-[10px] text-slate-500 font-medium whitespace-nowrap bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
-            {ctrlVentas.por.split('@')[0]} • {format(new Date(ctrlVentas.en), "dd/MM HH:mm")}
-          </span>
-        )}
-        {isOpen && (
-          <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 flex flex-col gap-0.5 min-w-[160px]">
-            <button onClick={() => handleCtrlVentasSec(campo, 'OK')} className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-green-700 hover:bg-green-50 rounded-lg w-full text-left"><Check className="w-3 h-3 shrink-0" /> Marcar como OK</button>
-            <button onClick={() => handleCtrlVentasSec(campo, 'RECHAZADO')} className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-lg w-full text-left"><X className="w-3 h-3 shrink-0" /> Rechazado</button>
-            {valor && <button onClick={() => handleCtrlVentasSec(campo, null)} className="flex items-center gap-2 px-3 py-2 text-xs text-slate-500 hover:bg-slate-50 rounded-lg w-full text-left">Quitar marca</button>}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const CvDocBadge = ({ doc }: { doc: DocumentoInterno }) => {
-    const valor = doc.ctrl_ventas_estado || null;
-    const key = `doc_${doc.id}`;
-    const isOpen = cvPopupKey === key;
-    return (
-      <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1" onClick={e => e.stopPropagation()}>
-        <button
-          onClick={canMarkCV ? () => setCvPopupKey(isOpen ? null : key) : undefined}
-          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded border-2 text-xs font-bold transition-all shadow-sm min-w-[70px] h-[26px] justify-center ${valor === 'OK' ? 'bg-green-500 border-green-600 text-white' : valor === 'RECHAZADO' ? 'bg-red-500 border-red-600 text-white' : (!canMarkCV ? 'bg-slate-100 border-slate-300 text-slate-400' : 'bg-white border-green-400 text-green-600')} ${canMarkCV ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed opacity-80'}`}
-          title={canMarkCV ? 'Control Ventas' : (valor || 'Sin marcar')}
-        >
-          {valor === 'OK' && <><Check className="w-3 h-3" /><span>OK</span></>}
-          {valor === 'RECHAZADO' && <><X className="w-3 h-3" /><span>Rechaz.</span></>}
-        </button>
-        {(valor === 'OK' || valor === 'RECHAZADO') && doc.ctrl_ventas_por && doc.ctrl_ventas_en && (
-          <span className="text-[10px] text-slate-500 bg-white/95 px-1.5 py-0.5 rounded border border-slate-200/50 shadow-sm whitespace-nowrap backdrop-blur-sm">
-            {doc.ctrl_ventas_por.split('@')[0]} • {format(new Date(doc.ctrl_ventas_en), "dd/MM HH:mm")}
-          </span>
-        )}
-        {isOpen && (
-          <div className="absolute top-full right-0 mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 flex flex-col gap-0.5 min-w-[160px]">
-            <button onClick={() => handleCtrlVentasDoc(doc.id, 'OK')} className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-green-700 hover:bg-green-50 rounded-lg w-full text-left"><Check className="w-3 h-3 shrink-0" /> Marcar como OK</button>
-            <button onClick={() => handleCtrlVentasDoc(doc.id, 'RECHAZADO')} className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-lg w-full text-left"><X className="w-3 h-3 shrink-0" /> Rechazado</button>
-            {valor && <button onClick={() => handleCtrlVentasDoc(doc.id, null)} className="flex items-center gap-2 px-3 py-2 text-xs text-slate-500 hover:bg-slate-50 rounded-lg w-full text-left">Quitar marca</button>}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const handleInicioRevision = async () => {
-    setIsStartingRevision(true);
-    const now = new Date().toISOString();
-    const { error } = await supabase
-      .from('negocios')
-      .update({ primer_admin_email: userEmail, primer_admin_fecha: now })
-      .eq('pedido_venta', negocio.pedido_venta);
-      
-    if (error) {
-      alert("Error al iniciar revisión: " + error.message);
-      setIsStartingRevision(false);
-      return;
-    }
-    
-    (negocio as any).primer_admin_email = userEmail;
-    (negocio as any).primer_admin_fecha = now;
-    
-    logAuditoria(`Ha iniciado la primera revisión de la carpeta`);
-    router.refresh();
-    setIsStartingRevision(false);
-  };
-
   const handleDeleteNegocio = async () => {
     if (!window.confirm("¿Estás seguro de que quieres eliminar este negocio y todos sus documentos correspondientes? Esta acción es irreversible.")) return;
     
@@ -964,88 +914,6 @@ export default function CarpetaClient({ negocio }: Props) {
     }
     
     router.replace("/negocios");
-  };
-
-  // Función para extracción manual de Datos del Cliente desde Nota de Venta
-  const extractDocumentData = async () => {
-    const notaVentaDoc = docs.find(d => d.nombre_archivo.toLowerCase().includes('nota') && d.nombre_archivo.toLowerCase().includes('venta'));
-    if (!notaVentaDoc) {
-      alert("No se encontró el documento de Nota de Venta.");
-      return;
-    }
-
-    setIsExtractingCliente(true);
-    try {
-      const res = await fetch('/api/extract-cliente', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: notaVentaDoc.url })
-      });
-      
-      const textResponse = await res.text();
-      let json;
-      try {
-        json = JSON.parse(textResponse);
-      } catch (e) {
-        console.error("API Error Response (Not JSON):", textResponse);
-        alert("Error de Servidor: La API no devolvió JSON válido. Revisar logs.");
-        setIsExtractingCliente(false);
-        return;
-      }
-      
-      if (json.success && json.data) {
-        // En lugar de guardar automáticamente, rellenamos el formulario para que el usuario revise y guarde
-        // Preservamos el RUT actual si ya existe para no sobrescribirlo con el de la Nota de Venta
-        const cli = extractedCliente || (negocio as any).cliente || negocio || {};
-        const dataToSet = { ...json.data };
-        
-        // Si el cliente ya tiene un RUT válido, mantenemos ese RUT
-        if (cli.rut && cli.rut.trim() !== "" && cli.rut !== "S/A" && cli.rut !== "S/N") {
-          dataToSet.rut = cli.rut;
-        }
-
-        if (dataToSet.comuna_cliente && !dataToSet.region_cliente) {
-          const regionEncontrada = obtenerRegionPorComuna(dataToSet.comuna_cliente);
-          if (regionEncontrada) {
-            dataToSet.region_cliente = regionEncontrada;
-          }
-        }
-
-        setManualCliente(dataToSet);
-        setIsEditingCliente(true);
-      } else {
-        alert("Error de extracción: " + (json.error || "Datos no encontrados en el PDF"));
-      }
-    } catch (err) {
-      console.error("Error auto extract:", err);
-      alert("Fallo de red tratando de leer el PDF.");
-    } finally {
-      setIsExtractingCliente(false);
-    }
-  };
-
-  const handleSaveManualCliente = async () => {
-    setIsExtractingCliente(true); // Reusing loader visually
-    const { error } = await supabase
-      .from('negocios')
-      .update({
-        nombre_apellido: manualCliente.nombre_apellido,
-        rut: manualCliente.rut,
-        direccion_cliente: manualCliente.direccion_cliente,
-        comuna_cliente: manualCliente.comuna_cliente,
-        region_cliente: manualCliente.region_cliente,
-        mail_cliente: manualCliente.mail_cliente,
-        movil_cliente: manualCliente.movil_cliente
-      })
-      .eq('pedido_venta', negocio.pedido_venta);
-      
-    setIsExtractingCliente(false);
-    if (error) {
-       alert("Error guardando datos: " + error.message);
-    } else {
-       setExtractedCliente(manualCliente);
-       setIsEditingCliente(false);
-    }
   };
 
   const handleSendComentario = async (e: React.FormEvent) => {
@@ -1122,6 +990,9 @@ export default function CarpetaClient({ negocio }: Props) {
       .insert([{
         pedido_venta: negocio.pedido_venta,
         nombre_archivo: finalFileName,
+        tipo_documento: 'OTRO',
+        estado_validacion: null,
+        es_firmado: false,
         tamano_kb: kbSize,
         url: publicUrlData.publicUrl,
         usuario_email: userEmail
@@ -1184,6 +1055,8 @@ export default function CarpetaClient({ negocio }: Props) {
       .insert([{
         pedido_venta: negocio.pedido_venta,
         nombre_archivo: finalFileName,
+        tipo_documento: 'OTRO',
+        estado_validacion: null,
         tamano_kb: kbSize,
         url: publicUrlData.publicUrl,
         usuario_email: userEmail,
@@ -1245,6 +1118,7 @@ export default function CarpetaClient({ negocio }: Props) {
         url: publicUrlData.publicUrl,
         tamano_kb: kbSize,
         usuario_email: userEmail,
+        estado_validacion: null,
         is_global: false // Convertir en documento local para que se pueda borrar o renombrar si lo desea
       })
       .eq('id', replacingDocId)
@@ -1289,6 +1163,9 @@ export default function CarpetaClient({ negocio }: Props) {
       .insert([{
         pedido_venta: negocio.pedido_venta,
         nombre_archivo: `${tipo}.${ext}`,
+        tipo_documento: mapTipo(tipo),
+        estado_validacion: null,
+        es_firmado: false,
         tamano_kb: kbSize,
         url: publicUrlData.publicUrl,
         usuario_email: userEmail
@@ -1298,7 +1175,19 @@ export default function CarpetaClient({ negocio }: Props) {
 
     if (!dbError && docData) {
       setDocs(prev => [docData, ...prev]);
-      logAuditoria(`Documento especial adjuntado (${tipo}): ${cleanFileName}`);
+      logAuditoria(`Documento adjuntado (${tipo}): ${cleanFileName}`);
+
+      if (tipo === 'Factura') {
+        const { error: updateError } = await supabase
+          .from('negocios')
+          .update({ estado: 'FACTURADO' })
+          .eq('pedido_venta', negocio.pedido_venta);
+          
+        if (!updateError) {
+          logAuditoria(`Estado del negocio cambiado automáticamente a Facturado`);
+          router.refresh();
+        }
+      }
     }
 
     setter(null);
@@ -1337,6 +1226,78 @@ export default function CarpetaClient({ negocio }: Props) {
     setEditingDocId(null);
   };
 
+  const handleValidacionCentral = async (elemento_id: string, accionEstado: 'APROBADO' | 'RECHAZADO') => {
+    const currentVal = validaciones.find(v => v.elemento_id === elemento_id);
+    let nuevoEstado = accionEstado;
+    
+    if (currentVal && currentVal.estado === accionEstado) {
+      nuevoEstado = 'PENDIENTE';
+    }
+
+    const { error, data } = await supabase
+      .from('negocios_validaciones')
+      .upsert({
+        pedido_venta: negocio.pedido_venta,
+        elemento_id: elemento_id,
+        estado: nuevoEstado,
+        usuario_email: userEmail || "sistema@suzuval.cl",
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'pedido_venta, elemento_id' })
+      .select()
+      .single();
+
+    if (!error) {
+      setValidaciones(prev => {
+        const updated = prev.filter(v => v.elemento_id !== elemento_id);
+        return [...updated, data || { elemento_id, estado: nuevoEstado }];
+      });
+      logAuditoria(`${elemento_id} marcado como ${nuevoEstado}`, 'VALIDACION');
+    } else {
+      alert("Error actualizando estado de validación");
+    }
+  };
+
+  const RenderBotonesValidacion = ({ elemento_id, absolute = false }: { elemento_id: string, absolute?: boolean }) => {
+    const docVal = validaciones.find(v => v.elemento_id === elemento_id)?.estado || 'PENDIENTE';
+    const containerClasses = absolute ? "absolute top-3 right-3 flex gap-1.5" : "flex gap-1.5 ml-3";
+    const canEdit = ['ADMINISTRATIVO', 'ADMIN', 'GERENCIA', 'JEFE'].includes(userRole || '');
+
+    return (
+      <div className={containerClasses} onClick={(e) => e.stopPropagation()}>
+        <button
+          onClick={(e) => { 
+            e.preventDefault(); 
+            if (canEdit) handleValidacionCentral(elemento_id, 'APROBADO'); 
+          }}
+          disabled={!canEdit}
+          className={`flex h-6 w-6 items-center justify-center rounded-full shadow-sm transition-all ${
+            docVal === 'APROBADO' 
+              ? 'bg-green-500 text-white scale-110' 
+              : `bg-green-50 text-green-400 ${canEdit ? 'hover:bg-green-100 hover:text-green-600 hover:scale-105 cursor-pointer' : 'opacity-60 cursor-default'}`
+          }`}
+          title={canEdit ? "Aprobar" : "Visto Bueno"}
+        >
+          <Check className="w-3.5 h-3.5" strokeWidth={3} />
+        </button>
+        <button
+          onClick={(e) => { 
+            e.preventDefault(); 
+            if (canEdit) handleValidacionCentral(elemento_id, 'RECHAZADO'); 
+          }}
+          disabled={!canEdit}
+          className={`flex h-6 w-6 items-center justify-center rounded-full shadow-sm transition-all ${
+            docVal === 'RECHAZADO' 
+              ? 'bg-red-500 text-white scale-110' 
+              : `bg-red-50 text-red-400 ${canEdit ? 'hover:bg-red-100 hover:text-red-600 hover:scale-105 cursor-pointer' : 'opacity-60 cursor-default'}`
+          }`}
+          title={canEdit ? "Rechazar" : "Rechazado"}
+        >
+          <X className="w-3.5 h-3.5" strokeWidth={3} />
+        </button>
+      </div>
+    );
+  };
+
   const handleDeleteDoc = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!window.confirm("¿Estás seguro de que quieres eliminar este documento?")) return;
@@ -1355,71 +1316,6 @@ export default function CarpetaClient({ negocio }: Props) {
     }
   };
 
-  const handleChatFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    const file = e.target.files[0];
-    
-    setSending(true);
-    
-    const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const storagePath = `${negocio.pedido_venta}/${Date.now()}_${cleanFileName}`;
-
-    const { error: uploadError } = await supabase
-      .storage
-      .from('documentos')
-      .upload(storagePath, file);
-
-    if (uploadError) {
-      alert("Error subiendo el archivo adjunto.");
-      setSending(false);
-      return;
-    }
-
-    const { data: publicUrlData } = supabase
-      .storage
-      .from('documentos')
-      .getPublicUrl(storagePath);
-
-    const kbSize = Math.round(file.size / 1024);
-    
-    const { data: docData } = await supabase
-      .from('negocios_documentos')
-      .insert([{
-        pedido_venta: negocio.pedido_venta,
-        nombre_archivo: file.name,
-        tamano_kb: kbSize,
-        url: publicUrlData.publicUrl
-      }])
-      .select()
-      .single();
-
-    if (docData) {
-      setDocs(prev => [docData, ...prev]);
-    }
-
-    const nombreExtraido = userEmail.split("@")[0] || "Usuario";
-    const comentarioEspecial = `[ARCHIVO]|${file.name}|${publicUrlData.publicUrl}|${kbSize}`;
-    
-    const { data: chatData } = await supabase
-      .from("negocios_comentarios")
-      .insert([{
-        pedido_venta: negocio.pedido_venta,
-        usuario_nombre: nombreExtraido,
-        usuario_email: userEmail,
-        comentario: comentarioEspecial
-      }])
-      .select()
-      .single();
-
-    if (chatData) {
-      setComentarios(prev => [...prev, chatData]);
-      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-    }
-
-    setSending(false);
-    if (chatFileInputRef.current) chatFileInputRef.current.value = "";
-  };
-
   const getDocIcon = (nombre: string) => {
     const ext = nombre.split(".").pop()?.toLowerCase();
     if (ext === 'pdf') return <File className="h-5 w-5" />;
@@ -1427,23 +1323,6 @@ export default function CarpetaClient({ negocio }: Props) {
     return <File className="h-5 w-5" />;
   };
 
-  // Cálculos derivados para Papeles
-  const mesUtm = mesFacturaA;
-  const valorUtmMes = utmData[mesUtm]?.utm || 0;
-  const valorVehiculoCalculado = valoresNegocio.precio_lista - valoresNegocio.bono_marca;
-  const netoVehiculoCalculado = Math.round(valorVehiculoCalculado / 1.19);
-
-  let tramoCalculado = 0;
-  if (valorUtmMes > 0 && valorVehiculoCalculado > 0) {
-    const d5 = valorVehiculoCalculado;
-    const d6 = valorUtmMes;
-    if (d5 >= d6 * 1.19 && d5 <= d6 * 60 * 1.19) tramoCalculado = 1;
-    else if (d5 > d6 * 60 * 1.19 && d5 <= d6 * 120 * 1.19) tramoCalculado = 2;
-    else if (d5 > d6 * 120 * 1.19 && d5 <= d6 * 250 * 1.19) tramoCalculado = 3;
-    else if (d5 > d6 * 250 * 1.19 && d5 <= d6 * 400 * 1.19) tramoCalculado = 4;
-    else if (d5 > d6 * 400 * 1.19) tramoCalculado = 5;
-  }
-  const totalPapeles = inscripcion + permisoCirculacion + seguroObligatorio + impuestoVerde;
 
   return (
     <div className="w-full bg-white flex flex-col shadow-none rounded-2xl overflow-hidden border border-slate-200" style={{ height: 'calc(100vh - 120px)', minHeight: '600px', maxHeight: 'calc(100vh - 40px)' }}>
@@ -1459,34 +1338,13 @@ export default function CarpetaClient({ negocio }: Props) {
               <ChevronLeft className="w-5 h-5 mr-1" />
               Volver
             </button>
-            <span className="inline-flex items-center rounded bg-slate-500 px-3 py-1 text-sm font-bold text-white shadow-sm border border-slate-400/50">
-              INTERNO: {negocio.interno}
+            <span className="inline-flex items-center rounded bg-slate-500 px-4 py-1.5 text-lg font-bold text-white shadow-sm border border-slate-400/50">
+              Pedido Venta: {negocio.pedido_venta}
             </span>
-            <span className="inline-flex items-center rounded bg-slate-500 px-3 py-1 text-sm font-bold text-white shadow-sm border border-slate-400/50">
-              PV: {negocio.pedido_venta}
+            <span className="inline-flex items-center rounded bg-slate-500 px-4 py-1.5 text-lg font-bold text-white shadow-sm border border-slate-400/50">
+              Interno: {negocio.interno}
             </span>
-            {(() => {
-              let badgeColors = 'bg-slate-100 text-slate-800 border-slate-300';
-              let displayText = negocio.estado ? negocio.estado.replace(/_/g, ' ') : '';
-              
-              const estadoStr = negocio.estado as string;
-              if (estadoStr === 'PARA_REVISION' || estadoStr === 'PARA_REVISIÓN') {
-                badgeColors = 'bg-yellow-100 text-yellow-800 border-yellow-300';
-                displayText = 'Pendiente Revisión';
-              } else if (estadoStr === 'REVISADO_EN_ESPERA') {
-                badgeColors = 'bg-orange-500 text-white border-orange-400';
-                displayText = 'NEGOCIO CON OBSERVACIÓN';
-              } else if (estadoStr === 'APROBADO' || estadoStr === 'FACTURADO' || estadoStr === 'REVISADO_OK' || estadoStr === 'REVISADO OK') {
-                badgeColors = 'bg-emerald-100 text-emerald-800 border-emerald-300';
-              } else if (estadoStr === 'RECHAZADO') {
-                badgeColors = 'bg-red-100 text-red-800 border-red-300';
-              }
-              return (
-                <span className={`inline-flex items-center rounded px-3 py-1 text-sm font-bold shadow-sm border ${badgeColors}`}>
-                  Estado: {displayText}
-                </span>
-              );
-            })()}
+
             {userRole === 'ADMIN' && (
               <button
                 onClick={handleDeleteNegocio}
@@ -1494,17 +1352,6 @@ export default function CarpetaClient({ negocio }: Props) {
                 title="Eliminar Negocio"
               >
                 <Trash2 className="w-4 h-4" /> Eliminar
-              </button>
-            )}
-            {['ADMINISTRATIVO', 'ADMIN'].includes(userRole) && !(negocio as any).primer_admin_email && (
-              <button
-                onClick={handleInicioRevision}
-                disabled={isStartingRevision}
-                className="ml-2 flex items-center justify-center gap-1.5 py-1 px-3 bg-amber-500 text-white font-bold text-sm rounded shadow-sm hover:bg-amber-600 transition-colors border border-amber-500 disabled:opacity-70 disabled:cursor-not-allowed"
-                title="Iniciar Revisión de Carpeta"
-              >
-                {isStartingRevision ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                Inicio Revisión
               </button>
             )}
           </div>
@@ -1524,14 +1371,66 @@ export default function CarpetaClient({ negocio }: Props) {
               Creado el {format(new Date(negocio.created_at), "dd/MM/yyyy HH:mm", { locale: es })}
             </span>
           </div>
-          {(negocio as any).primer_admin_email && (
-            <div className="text-white text-base font-bold flex items-center gap-1.5 bg-blue-900/60 px-3 py-1.5 rounded-lg shadow-sm border border-blue-400/30" title="Primer Administrativo en revisar la carpeta">
-              <Eye className="w-5 h-5" />
-              <span>1ra Revisión: {(negocio as any).primer_admin_email.split('@')[0]} • {format(new Date((negocio as any).primer_admin_fecha), "dd/MM HH:mm")}</span>
-            </div>
-          )}
         </div>
       </div>
+
+      {/* BARRA DE FLUJO ESTILO SALESFORCE */}
+      {(() => {
+        const STAGES = [
+          { id: 'PARA_REVISIÓN', label: 'PENDIENTE REVISIÓN', activeBg: 'bg-yellow-500 text-white' },
+          { id: 'REVISADO_EN_ESPERA', label: 'EN REVISIÓN', activeBg: 'bg-orange-500 text-white' },
+          { id: 'REVISADO_OK', label: 'OK REVISADO', activeBg: 'bg-emerald-500 text-white' },
+          { id: 'FACTURADO', label: 'FACTURADO', activeBg: 'bg-blue-600 text-white' },
+        ];
+
+        let normalizedEstado = negocio.estado;
+        if (normalizedEstado === 'PARA_REVISION') normalizedEstado = 'PARA_REVISIÓN';
+        if (normalizedEstado === 'APROBADO' || normalizedEstado === 'REVISADO OK') normalizedEstado = 'REVISADO_OK';
+
+        const activeIndex = STAGES.findIndex(s => s.id === normalizedEstado) >= 0 
+          ? STAGES.findIndex(s => s.id === normalizedEstado) 
+          : 0;
+
+        return (
+          <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 w-full flex items-center shadow-sm z-10 relative shrink-0">
+            <div className="flex w-full max-w-6xl mx-auto filter drop-shadow-sm">
+              {STAGES.map((stage, idx) => {
+                const isCompleted = idx < activeIndex;
+                const isActive = idx === activeIndex;
+                
+                let bgColor = 'bg-white text-slate-500';
+                if (isCompleted) bgColor = 'bg-emerald-500 text-white'; // Completed stages remain green
+                else if (isActive) bgColor = stage.activeBg;
+                
+                const zIndex = STAGES.length - idx;
+                let clipPath = '';
+                if (idx === 0) {
+                  clipPath = 'polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%)';
+                } else if (idx === STAGES.length - 1) {
+                  clipPath = 'polygon(0 0, 100% 0, 100% 100%, 0 100%, 16px 50%)';
+                } else {
+                  clipPath = 'polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%, 16px 50%)';
+                }
+
+                return (
+                  <div 
+                    key={stage.id} 
+                    className={`relative flex-1 flex items-center justify-center py-2.5 px-4 text-xs md:text-sm font-bold uppercase tracking-wider transition-colors ${bgColor}`}
+                    style={{ 
+                      clipPath,
+                      marginLeft: idx !== 0 ? '-14px' : '0',
+                      zIndex 
+                    }}
+                  >
+                    {isCompleted && <Check className="w-4 h-4 mr-2 shrink-0" strokeWidth={3} />}
+                    <span className="truncate">{stage.label}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="flex flex-1 overflow-hidden relative">
         {/* Lado izquierdo: Tabs de chat y archivos */}
@@ -1557,7 +1456,7 @@ export default function CarpetaClient({ negocio }: Props) {
                 </button>
                 <div className="flex flex-1">
                   <div className="flex-1 py-3 text-sm font-bold text-center flex items-center justify-center border-b-2 transition-colors text-blue-700 bg-white border-blue-600">
-                    Chat del Negocio
+                    Chat
                   </div>
                 </div>
               </>
@@ -1582,29 +1481,9 @@ export default function CarpetaClient({ negocio }: Props) {
                       .filter(msg => !msg.comentario.startsWith("[AUDITORIA]|"))
                       .map((msg) => {
                         const esMio = msg.usuario_email === userEmail;
-                        const esArchivo = msg.comentario.startsWith("[ARCHIVO]|");
                         const esAuditoria = msg.comentario.startsWith("[AUDITORIA]|");
                         
-                        let contentNode;
-                        if (esArchivo) {
-                          const [, nombreBase, docUrl, tamanoStr] = msg.comentario.split("|");
-                          contentNode = (
-                            <div className="flex flex-col gap-1.5 mt-1">
-                              <div className={`flex items-center gap-3 p-3 rounded-xl mb-1 cursor-pointer transition-colors ${esMio ? 'bg-blue-700 hover:bg-blue-800' : 'bg-slate-50 hover:bg-slate-100 border border-slate-200'}`} onClick={() => window.open(docUrl, "_blank")}>
-                                <div className={`p-2 rounded-lg ${esMio ? 'bg-white/20 text-white' : 'bg-white text-blue-600 shadow-sm'}`}>
-                                   <Paperclip className="w-5 h-5" />
-                                </div>
-                                <div className="overflow-hidden flex-1 pr-2">
-                                  <p className={`text-sm font-bold truncate max-w-[200px] ${esMio ? 'text-white' : 'text-slate-700'}`}>{nombreBase}</p>
-                                  <p className={`text-xs ${esMio ? 'text-blue-200' : 'text-slate-500'}`}>{tamanoStr} KB</p>
-                                </div>
-                                <Download className={`w-4 h-4 shrink-0 ${esMio ? 'text-blue-200' : 'text-slate-400'}`} />
-                              </div>
-                            </div>
-                          );
-                        } else {
-                          contentNode = msg.comentario;
-                        }
+                        let contentNode = msg.comentario;
 
                         return (
                           <div key={msg.id} className={`flex gap-3 ${esMio ? "justify-end" : "justify-start"}`}>
@@ -1629,23 +1508,6 @@ export default function CarpetaClient({ negocio }: Props) {
                 
                 <div className="p-4 bg-white border-t border-slate-200 shrink-0 shadow-[0_-2px_4px_rgba(0,0,0,0.02)]">
                   <form onSubmit={handleSendComentario} className="flex gap-2 items-center">
-                    <input 
-                      type="file" 
-                      ref={chatFileInputRef} 
-                      onChange={handleChatFileUpload} 
-                      className="hidden" 
-                      accept=".pdf,.png,.jpg,.jpeg"
-                    />
-                    <button 
-                      type="button"
-                      onClick={() => chatFileInputRef.current?.click()}
-                      disabled={sending}
-                      className="flex shrink-0 items-center justify-center rounded-full text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors active:scale-95 disabled:opacity-50 p-2.5"
-                      title="Adjuntar archivo al área de actividad"
-                    >
-                      <Paperclip className="h-6 w-6" />
-                    </button>
-
                     <input 
                       type="text" 
                       value={nuevoComentario}
@@ -1684,8 +1546,8 @@ export default function CarpetaClient({ negocio }: Props) {
              <button onClick={() => setRightActiveTab('firmados')} className={`mr-8 pb-3 text-sm font-bold border-b-[3px] transition-all ${rightActiveTab === 'firmados' ? 'border-blue-700 text-blue-800' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>
                 Documentos Firmados
              </button>
-             <button onClick={() => setRightActiveTab('historial')} className={`mr-8 pb-3 text-sm font-bold border-b-[3px] transition-all ${rightActiveTab === 'historial' ? 'border-blue-700 text-blue-800' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>
-                Historial Negocio
+             <button onClick={() => setRightActiveTab('historial')} className={`mr-8 pb-3 text-sm font-bold border-b-[3px] transition-all ${rightActiveTab === 'historial' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>
+                Historial
              </button>
           </div>
           
@@ -1704,110 +1566,68 @@ export default function CarpetaClient({ negocio }: Props) {
           )}
 
           <div className="w-full flex flex-col p-6 overflow-y-scroll overflow-x-hidden flex-1 scrollbar-custom min-h-0">
-            {rightActiveTab === 'historial' ? (
-              <div className="h-full flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200 p-6 overflow-y-auto">
-                <div className="space-y-6 mb-10 pb-10 shrink-0">
-                  <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Historial del Negocio</h4>
-                  <div className="flex flex-col space-y-4 mt-4">
-                    {loading ? (
-                      <div className="flex justify-center py-6 text-slate-400">
-                        <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-                      </div>
-                    ) : comentarios.filter(msg => msg.comentario.startsWith("[AUDITORIA]|")).length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-full pt-10 text-slate-400 opacity-60">
-                        <FileSignature className="w-12 h-12 mb-3 text-slate-300" />
-                        <p className="text-sm font-medium">No hay registros de historial aún</p>
-                      </div>
-                    ) : (
-                      comentarios
-                        .filter(msg => msg.comentario.startsWith("[AUDITORIA]|"))
-                        .map((msg) => {
-                          const details = msg.comentario.replace("[AUDITORIA]|", "");
-                          return (
-                            <div key={msg.id} className="flex gap-3 justify-start">
-                              <div className="flex flex-col items-start w-full">
-                                <div className="text-xs font-medium text-slate-500 mb-1 px-1">
-                                  {msg.usuario_nombre} • {format(new Date(msg.created_at), "dd/MM/yyyy HH:mm", { locale: es })}
-                                </div>
-                                <div className="px-4 py-3 rounded-2xl text-[13px] bg-slate-100 text-slate-700 border border-slate-200 shadow-sm break-words whitespace-pre-wrap w-full">
-                                  {details}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : rightActiveTab === 'requeridos' ? (
+            {rightActiveTab === 'requeridos' ? (
               <>
                 <div className="mb-0">
-                  <h3 className="text-2xl font-bold text-slate-800 mb-6">Pedido de Venta {negocio.pedido_venta}</h3>
+                  
                   
                   <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
-                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between gap-2">
-                      <div className="flex items-center flex-1">
-                        <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Datos del Vehículo</h4>
-                      </div>
-                      <div className="flex items-center justify-center">
-                        <CvSecBadge campo="vehiculo" valor={ctrlVentas.vehiculo} />
-                      </div>
-                      <div className="flex-1" />
-                    </div>
+                      <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between gap-2">
+                       <div className="flex items-center flex-1">
+                         <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Datos del Vehículo</h4>
+                         <RenderBotonesValidacion elemento_id="DATOS_VEHICULO" />
+                       </div>
+                     </div>
                     <div className="p-5 flex flex-wrap gap-x-6 gap-y-6">
                       <div className="flex-1 min-w-[100px] max-w-xs">
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Interno</p>
-                        <p className="text-sm font-semibold text-slate-800 break-words">{negocio.interno || "S/A"}</p>
+                        <p className="text-sm font-semibold text-slate-800 break-words">{negocio.interno || "-"}</p>
                       </div>
                       <div className="flex-1 min-w-[150px] max-w-xs">
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">N° de Chasis</p>
-                        <p className="text-sm font-semibold text-slate-800 break-words">{(negocio as any).chasis || (negocio as any).numero_chasis || "S/A"}</p>
+                        <p className="text-sm font-semibold text-slate-800 break-words">{(negocio as any).chasis || (negocio as any).numero_chasis || "-"}</p>
                       </div>
                       <div className="flex-1 min-w-[120px] max-w-xs">
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Marca</p>
-                        <p className="text-sm font-semibold text-slate-800 break-words">{negocio.marca || "S/A"}</p>
+                        <p className="text-sm font-semibold text-slate-800 break-words">{negocio.marca || "-"}</p>
                       </div>
                       <div className="flex-1 min-w-[120px] max-w-xs">
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Año Facturación</p>
-                        <p className="text-sm font-semibold text-slate-800 break-words">{negocio.ano || (negocio as any).ano_facturacion || (negocio as any).anio || "S/A"}</p>
+                        <p className="text-sm font-semibold text-slate-800 break-words">{negocio.ano || (negocio as any).ano_facturacion || (negocio as any).anio || "-"}</p>
                       </div>
                       
                       <div className="w-full h-px bg-slate-50 border-0 m-0 shrink-0"></div>
 
                       <div className="flex-1 min-w-[140px] max-w-xs">
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Cód. Mod. Vehículo</p>
-                        <p className="text-sm font-semibold text-slate-800 break-words">{(negocio as any).codigo_modelo || (negocio as any).cod_modelo_vehiculo || "S/A"}</p>
+                        <p className="text-sm font-semibold text-slate-800 break-words">{(negocio as any).codigo_modelo || (negocio as any).cod_modelo_vehiculo || "-"}</p>
                       </div>
                       <div className="flex-[2] min-w-[200px] max-w-md">
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Descripción Modelo</p>
-                        <p className="text-sm font-semibold text-slate-800 break-words">{negocio.modelo || (negocio as any).descripcion_modelo || "S/A"}</p>
+                        <p className="text-sm font-semibold text-slate-800 break-words">{negocio.modelo || (negocio as any).descripcion_modelo || "-"}</p>
                       </div>
                       <div className="flex-1 min-w-[120px] max-w-xs">
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Color</p>
-                        <p className="text-sm font-semibold text-slate-800 break-words">{negocio.color || "S/A"}</p>
+                        <p className="text-sm font-semibold text-slate-800 break-words">{negocio.color || "-"}</p>
                       </div>
                     </div>
                   </div>
 
                   <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
-                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between gap-2">
-                      <div className="flex items-center flex-1">
-                        <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Observaciones de Venta</h4>
-                      </div>
-                      <div className="flex items-center justify-center">
-                        <CvSecBadge campo="observaciones" valor={ctrlVentas.observaciones} />
-                      </div>
-                      <div className="flex-1" />
-                    </div>
+                      <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between gap-2">
+                       <div className="flex items-center flex-1">
+                         <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Observaciones de Venta</h4>
+                         <RenderBotonesValidacion elemento_id="OBSERVACIONES_VENTA" />
+                       </div>
+                     </div>
                     <div className="p-5 flex flex-wrap gap-x-6 gap-y-6">
                       <div className="flex-1 min-w-[150px] max-w-xs">
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tipo Compra</p>
-                        <p className="text-sm font-semibold text-slate-800 break-words">{negocio.tipo_compra || "S/A"}</p>
+                        <p className="text-sm font-semibold text-slate-800 break-words">{negocio.tipo_compra || "-"}</p>
                       </div>
                       <div className="flex-1 min-w-[150px] max-w-xs">
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Saldo Inicial</p>
-                        <p className="text-sm font-semibold text-slate-800 break-words">{negocio.saldo || "S/A"}</p>
+                        <p className="text-sm font-semibold text-slate-800 break-words">{negocio.saldo || "-"}</p>
                       </div>
                       <div className="flex-1 min-w-[150px] max-w-xs">
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Prepago Vigente</p>
@@ -1877,7 +1697,7 @@ export default function CarpetaClient({ negocio }: Props) {
                       </div>
                       <div className="flex-1 min-w-[150px] max-w-xs">
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Gestión de Accesorios</p>
-                        <p className="text-sm font-semibold text-slate-800 break-words">{(negocio as any).gestion_accesorios || "S/A"}</p>
+                        <p className="text-sm font-semibold text-slate-800 break-words">{(negocio as any).gestion_accesorios || "-"}</p>
                       </div>
                       
                       <div className="w-full h-px bg-slate-50 border-0 m-0 shrink-0"></div>
@@ -1890,312 +1710,33 @@ export default function CarpetaClient({ negocio }: Props) {
                   </div>
                   
                   {/* SECCIÓN DE CUADRATURA */}
-                  <CuadraturaSection negocio={negocio} badgeSlot={<CvSecBadge campo="cuadratura" valor={ctrlVentas.cuadratura} />} />
+                  <CuadraturaSection 
+                    negocio={negocio} 
+                    onCuadraturaLinked={(id, rut, nombre) => setLinkedClienteInfo({ id, rut, nombre_apellido: nombre })}
+                    renderValidacion={(id) => <RenderBotonesValidacion elemento_id={id} />}
+                  />
                 </div>
               </>
             ) : rightActiveTab === 'cliente' ? (
               <>
                 <div className="mb-0">
-                  <h3 className="text-2xl font-bold text-slate-800 mb-6">Pedido de Venta {negocio.pedido_venta}</h3>
+                  
                 
                 {/* NUEVA SECCIÓN: DATOS DEL CLIENTE */}
-                {(() => {
-                  const notaVentaDoc = docs.find(d => d.nombre_archivo.toLowerCase().includes('nota') && d.nombre_archivo.toLowerCase().includes('venta'));
-                  const cli = extractedCliente || (negocio as any).cliente || negocio || {};
-                  const missingDoc = !notaVentaDoc;
-
-                  return (
-                      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm mb-8">
-                        <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between gap-2 group transition-colors">
-                          {/* Izquierda: Título + ambos botones de acción */}
-                          <div className="flex items-center gap-2 flex-1">
-                            <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider mr-2">Datos del Cliente</h3>
-                            {isEditingCliente ? (
-                              <>
-                                <button
-                                  onClick={handleSaveManualCliente}
-                                  disabled={isExtractingCliente}
-                                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs border border-transparent rounded-md shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50"
-                                >
-                                  {isExtractingCliente ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Guardar Cambios"}
-                                </button>
-                                <button
-                                  onClick={() => setIsEditingCliente(false)}
-                                  disabled={isExtractingCliente}
-                                  className="px-3 py-1 bg-white hover:bg-slate-100 text-slate-600 font-medium text-xs border border-slate-200 rounded-md shadow-sm transition-all"
-                                >
-                                  Cancelar
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                {!missingDoc && (
-                                  <button
-                                    onClick={extractDocumentData}
-                                    disabled={isExtractingCliente}
-                                    className="px-3 py-1 bg-white hover:bg-slate-100 text-indigo-600 font-medium text-xs border border-indigo-200 hover:border-indigo-300 rounded-md shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50"
-                                  >
-                                    {isExtractingCliente ? (
-                                      <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Escaneando...</>
-                                    ) : (
-                                      <><Eye className="w-3.5 h-3.5" /> Extraer desde Nota Venta</>
-                                    )}
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => {
-                                    setManualCliente({
-                                      nombre_apellido: cli.nombre_apellido || (negocio as any).nombre_apellido,
-                                      rut: cli.rut || (negocio as any).rut,
-                                      direccion_cliente: (cli as any).direccion_cliente || (negocio as any).direccion_cliente,
-                                      comuna_cliente: (cli as any).comuna_cliente || (negocio as any).comuna_cliente,
-                                      region_cliente: (cli as any).region_cliente || (negocio as any).region_cliente,
-                                      mail_cliente: (cli as any).mail_cliente || (negocio as any).mail_cliente,
-                                      movil_cliente: (cli as any).movil_cliente || (negocio as any).movil_cliente,
-                                    });
-                                    setIsEditingCliente(true);
-                                  }}
-                                  className="px-3 py-1 bg-white hover:bg-slate-100 text-slate-600 font-medium text-xs border border-slate-200 hover:border-slate-300 rounded-md shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95"
-                                >
-                                  Editar Manual
-                                </button>
-                              </>
-                            )}
-                          </div>
-                          {/* Centro: Badge OK/Rechazado */}
-                          <div className="flex items-center justify-center">
-                            <CvSecBadge campo="cliente" valor={ctrlVentas.cliente} />
-                          </div>
-                          {/* Derecha: espaciador simétrico */}
-                          <div className="flex-1" />
-                        </div>
-                      <div className="block w-full p-4 md:p-6 bg-white min-h-[100px]">
-                        {missingDoc && (
-                          <div className="mb-6 bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r-lg flex items-start gap-4">
-                            <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
-                            <div>
-                               <p className="text-sm font-bold text-amber-800">Nota de Venta No Adjuntada</p>
-                               <p className="text-sm text-amber-700 mt-1">Sube el documento de Nota de Venta en la pestaña Documentos para poder extraer los datos automáticamente.</p>
-                            </div>
-                          </div>
-                        )}
-                        <div className="flex flex-col gap-6 w-full">
-                            {/* Fila 1 */}
-                            <div className="flex flex-col md:flex-row gap-6 w-full">
-                              <div className="flex-1">
-                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nombres y Apellidos</p>
-                                {isEditingCliente ? 
-                                  <input type="text" className="w-full text-sm border-b border-slate-300 focus:border-indigo-500 outline-none pb-1 bg-slate-50 px-1 rounded-t-sm" value={manualCliente.nombre_apellido || ""} onChange={e => setManualCliente({...manualCliente, nombre_apellido: e.target.value})} /> :
-                                  <p className="text-sm font-semibold text-slate-800 break-words">{cli.nombre_apellido || (negocio as any).nombre_apellido || "S/A"}</p>
-                                }
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">RUT</p>
-                                {isEditingCliente ? 
-                                  <input type="text" className="w-full text-sm border-b border-slate-300 focus:border-indigo-500 outline-none pb-1 bg-slate-50 px-1 rounded-t-sm" value={manualCliente.rut || ""} onChange={e => setManualCliente({...manualCliente, rut: e.target.value})} /> :
-                                  <p className="text-sm font-semibold text-slate-800 break-words">{cli.rut || (negocio as any).rut || "S/A"}</p>
-                                }
-                              </div>
-                            </div>
-
-                            <div className="w-full h-px bg-slate-100 my-1"></div>
-
-                            {/* Fila 2 */}
-                            <div className="flex flex-col md:flex-row gap-6 w-full">
-                              <div className="flex-1 md:flex-[2]">
-                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Dirección</p>
-                                {isEditingCliente ? 
-                                  <input type="text" className="w-full text-sm border-b border-slate-300 focus:border-indigo-500 outline-none pb-1 bg-slate-50 px-1 rounded-t-sm" value={manualCliente.direccion_cliente || ""} onChange={e => setManualCliente({...manualCliente, direccion_cliente: e.target.value})} /> :
-                                  <p className="text-sm font-semibold text-slate-800 break-words">{(cli as any).direccion_cliente || (negocio as any).direccion_cliente || "S/A"}</p>
-                                }
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Comuna</p>
-                                {isEditingCliente ? 
-                                  <select 
-                                    className="w-full text-sm border-b border-slate-300 focus:border-indigo-500 outline-none pb-1 bg-slate-50 px-1 rounded-t-sm" 
-                                    value={manualCliente.comuna_cliente || ""} 
-                                    onChange={e => {
-                                      const newComuna = e.target.value;
-                                      const newRegion = obtenerRegionPorComuna(newComuna) || manualCliente.region_cliente;
-                                      setManualCliente({...manualCliente, comuna_cliente: newComuna, region_cliente: newRegion});
-                                    }}
-                                  >
-                                    <option value="">Seleccione una comuna...</option>
-                                    {todasLasComunas.map(c => (
-                                      <option key={c} value={c}>{c}</option>
-                                    ))}
-                                  </select> :
-                                  <p className="text-sm font-semibold text-slate-800 break-words">{(cli as any).comuna_cliente || (negocio as any).comuna_cliente || "S/A"}</p>
-                                }
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Región</p>
-                                {isEditingCliente ? 
-                                  <select 
-                                    className="w-full text-sm border-b border-slate-300 focus:border-indigo-500 outline-none pb-1 bg-slate-50 px-1 rounded-t-sm" 
-                                    value={manualCliente.region_cliente || ""} 
-                                    onChange={e => setManualCliente({...manualCliente, region_cliente: e.target.value})}
-                                  >
-                                    <option value="">Seleccione una región...</option>
-                                    {regionesYcomunas.map(r => (
-                                      <option key={r.region} value={r.region}>{r.region}</option>
-                                    ))}
-                                  </select> :
-                                  <p className="text-sm font-semibold text-slate-800 break-words">{(cli as any).region_cliente || (negocio as any).region_cliente || "S/A"}</p>
-                                }
-                              </div>
-                            </div>
-
-                            <div className="w-full h-px bg-slate-100 my-1"></div>
-
-                            {/* Fila 3 */}
-                            <div className="flex flex-col md:flex-row gap-6 w-full">
-                              <div className="flex-[2]">
-                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Mail</p>
-                                {isEditingCliente ? 
-                                  <input type="text" className="w-full text-sm border-b border-slate-300 focus:border-indigo-500 outline-none pb-1 bg-slate-50 px-1 rounded-t-sm" value={manualCliente.mail_cliente || ""} onChange={e => setManualCliente({...manualCliente, mail_cliente: e.target.value})} /> :
-                                  <p className="text-sm font-semibold text-slate-800 break-all">{(cli as any).mail_cliente || (negocio as any).mail_cliente || "S/A"}</p>
-                                }
-                              </div>
-                              <div className="flex-[2]">
-                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Móvil</p>
-                                {isEditingCliente ? 
-                                  <input type="text" className="w-full text-sm border-b border-slate-300 focus:border-indigo-500 outline-none pb-1 bg-slate-50 px-1 rounded-t-sm" value={manualCliente.movil_cliente || ""} onChange={e => setManualCliente({...manualCliente, movil_cliente: e.target.value})} /> :
-                                  <p className="text-sm font-semibold text-slate-800 break-words">{(cli as any).movil_cliente || (negocio as any).movil_cliente || "S/A"}</p>
-                                }
-                              </div>
-                            </div>
-
-                            <div className="w-full h-px bg-slate-100 my-1"></div>
-
-                            {/* Fila 4: Extra data section. Always editable */}
-                            <div className="flex flex-col gap-6 w-full my-4">
-                              <div className="flex flex-col md:flex-row gap-6 w-full">
-                                <div className="flex-1">
-                                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Contribuyente Electrónico</p>
-                                  <select 
-                                    className="w-full text-sm border-b border-slate-300 focus:border-indigo-500 outline-none pb-1 bg-transparent px-1" 
-                                    value={extraData.contribuyente_electronico} 
-                                    onChange={e => {
-                                      handleExtraDataChange("contribuyente_electronico", e.target.value);
-                                      handleExtraDataSave("contribuyente_electronico", e.target.value);
-                                    }}
-                                  >
-                                    <option value="">Seleccione...</option>
-                                    <option value="SI">SI</option>
-                                    <option value="NO">NO</option>
-                                  </select>
-                                  <div className="mt-1 flex items-center justify-start">
-                                    <a href="https://www2.sii.cl/stc/noauthz" target="_blank" rel="noreferrer" className="text-[10px] text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1">
-                                      <ExternalLink className="w-3 h-3" /> Consultar en SII.cl
-                                    </a>
-                                  </div>
-                                </div>
-                              <div className="flex-1">
-                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tipo de Negocio</p>
-                                <select 
-                                  className="w-full text-sm border-b border-slate-300 focus:border-indigo-500 outline-none pb-1 bg-transparent px-1" 
-                                  value={extraData.tipo_negocio} 
-                                  onChange={e => {
-                                    handleExtraDataChange("tipo_negocio", e.target.value);
-                                    handleExtraDataSave("tipo_negocio", e.target.value);
-                                  }}
-                                >
-                                  <option value="">Seleccione...</option>
-                                  <option value="NEGOCIO VENTA DIRECTA">NEGOCIO VENTA DIRECTA</option>
-                                  <option value="NEGOCIO COMPRA PARA">NEGOCIO COMPRA PARA</option>
-                                  <option value="CLIENTE EMPRESA">CLIENTE EMPRESA</option>
-                                </select>
-                              </div>
-                            </div>
-                            </div>
-
-                            <div className="w-full h-px bg-slate-100 my-1"></div>
-
-                            {/* Fila 5 */}
-                            <div className="flex flex-col md:flex-row gap-6 w-full">
-                              <div className="flex-1 md:flex-[2]">
-                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Estado Civil</p>
-                                <select 
-                                  className="w-full text-sm border-b border-slate-300 focus:border-indigo-500 outline-none pb-1 bg-transparent px-1" 
-                                  value={extraData.estado_civil} 
-                                  onChange={e => {
-                                    handleExtraDataChange("estado_civil", e.target.value);
-                                    handleExtraDataSave("estado_civil", e.target.value);
-                                  }}
-                                >
-                                  <option value="">Seleccione...</option>
-                                  <option value="SOLTERO/A">SOLTERO/A</option>
-                                  <option value="CASADO/A">CASADO/A</option>
-                                  <option value="AUC">AUC</option>
-                                  <option value="CONVIVIENTE CIVIL">CONVIVIENTE CIVIL</option>
-                                  <option value="VIUDO/A">VIUDO/A</option>
-                                  <option value="DIVORCIADO/A">DIVORCIADO/A</option>
-                                  <option value="CLIENTE EMPRESA">CLIENTE EMPRESA</option>
-                                </select>
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Comunidad de Bienes</p>
-                                <select 
-                                  className="w-full text-sm border-b border-slate-300 focus:border-indigo-500 outline-none pb-1 bg-transparent px-1" 
-                                  value={extraData.comunidad_bienes} 
-                                  onChange={e => {
-                                    handleExtraDataChange("comunidad_bienes", e.target.value);
-                                    handleExtraDataSave("comunidad_bienes", e.target.value);
-                                  }}
-                                >
-                                  <option value="">Seleccione...</option>
-                                  <option value="SI">SI</option>
-                                  <option value="NO">NO</option>
-                                </select>
-                              </div>
-                            </div>
-
-                            <div className="w-full h-px bg-slate-100 my-1"></div>
-
-                            {/* Fila 6 */}
-                            <div className="flex flex-col md:flex-row gap-6 w-full">
-                              <div className="flex-1">
-                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nacionalidad</p>
-                                <input 
-                                  type="text" 
-                                  className="w-full text-sm border-b border-slate-300 focus:border-indigo-500 outline-none pb-1 bg-transparent px-1" 
-                                  value={extraData.nacionalidad} 
-                                  onChange={e => handleExtraDataChange("nacionalidad", e.target.value)}
-                                  onBlur={e => handleExtraDataSave("nacionalidad", e.target.value)}
-                                />
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Profesión y/o Giro Empresa</p>
-                                <input 
-                                  type="text" 
-                                  className="w-full text-sm border-b border-slate-300 focus:border-indigo-500 outline-none pb-1 bg-transparent px-1" 
-                                  value={extraData.profesion_giro} 
-                                  onChange={e => handleExtraDataChange("profesion_giro", e.target.value)}
-                                  onBlur={e => handleExtraDataSave("profesion_giro", e.target.value)}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                      </div>
-                    </div>
-                  );
-                })()}
+                <DatosClienteTab 
+                  pedidoVenta={negocio.pedido_venta} 
+                  linkedClienteInfo={linkedClienteInfo} 
+                  renderValidacion={(id) => <RenderBotonesValidacion elemento_id={id} />}
+                />
+                
                 {/* NUEVA TARJETA: FIRMA DIGITAL CLIENTE */}
                 <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm mb-8">
                   <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between gap-2 group transition-colors">
-                    {/* Izquierda: título */}
-                    <div className="flex items-center flex-1">
-                      <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">Carnet Identidad / Firma Digital</h3>
-                    </div>
-                    {/* Centro: Badge OK/Rechazado */}
-                    <div className="flex items-center justify-center">
-                      <CvSecBadge campo="firma" valor={ctrlVentas.firma} />
-                    </div>
-                    {/* Derecha: espacio simétrico */}
-                    <div className="flex-1" />
-                  </div>
+                     <div className="flex items-center flex-1">
+                       <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">Carnet Identidad / Firma Digital</h3>
+                       <RenderBotonesValidacion elemento_id="FIRMA_DIGITAL" />
+                     </div>
+                   </div>
                   <div className="p-4 md:p-6 bg-white min-h-[100px]">
                     {isLoadingFirmaDigital ? (
                       <div className="flex flex-col justify-center items-center py-8">
@@ -2204,7 +1745,7 @@ export default function CarpetaClient({ negocio }: Props) {
                       </div>
                     ) : firmaDigitalData ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {Object.entries(firmaDigitalData).filter(([k, v]) => k !== 'id' && k !== 'created_at' && v !== null && v !== '').map(([key, value]) => (
+                        {Object.entries(firmaDigitalData).filter(([k, v]) => k !== 'id' && k !== 'updated_at' && k !== 'created_at' && v !== null && v !== '').map(([key, value]) => (
                           <div key={key}>
                             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">{key.replace(/_/g, ' ')}</p>
                             {key.toLowerCase() === 'rut' ? (
@@ -2219,15 +1760,18 @@ export default function CarpetaClient({ negocio }: Props) {
                                   Actualizar Firma
                                 </button>
                               </div>
-                            ) : key.toLowerCase() === 'ci' ? (
+                            ) : ['firma', 'ci_frontal', 'ci_trasero'].includes(key.toLowerCase()) ? (
                               <a 
-                                href={typeof value === 'string' && value.startsWith('http') ? value : supabase.storage.from('firmas').getPublicUrl(String(value)).data.publicUrl} 
+                                href={typeof value === 'string' && (value.startsWith('http') || value.startsWith('data:image')) ? value : supabase.storage.from('firmas').getPublicUrl(String(value)).data.publicUrl} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-md transition-colors mt-1"
+                                className="inline-block mt-1"
                               >
-                                <File className="w-3.5 h-3.5" />
-                                Ver Documento CI
+                                <img 
+                                  src={typeof value === 'string' && (value.startsWith('http') || value.startsWith('data:image')) ? value : supabase.storage.from('firmas').getPublicUrl(String(value)).data.publicUrl} 
+                                  alt={key} 
+                                  className="max-h-32 object-contain border border-slate-200 rounded-md p-1 bg-slate-50 hover:opacity-80 transition-opacity" 
+                                />
                               </a>
                             ) : typeof value === 'string' && (value.startsWith('data:image') || value.startsWith('http')) ? (
                               <img src={value} alt={key} className="max-h-32 object-contain border border-slate-200 rounded-md p-1 bg-slate-50" />
@@ -2250,11 +1794,9 @@ export default function CarpetaClient({ negocio }: Props) {
                 </div>
               </>
             ) : rightActiveTab === 'archivos' ? (
-              <div className="h-full flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200 p-6 overflow-y-auto">
+              <div className="h-full flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                 
                 <div className="space-y-6 mb-10 pb-10 border-b border-slate-100 shrink-0">
-                  <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Documentos Requeridos</h4>
-                  
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {[
                       { tipo: 'Nota de Venta', desc: 'Nota Venta Salesforce / SAP', icon: File, ref: notaVentaInputRef },
@@ -2264,7 +1806,7 @@ export default function CarpetaClient({ negocio }: Props) {
                       { tipo: 'Retoma Auto Usado', desc: 'Documentación de Retoma', icon: ImageIcon, ref: retomaInputRef },
                       ...(['ADMINISTRATIVO', 'ADMIN'].includes(userRole) ? [{ tipo: 'Factura', desc: 'Factura del negocio', icon: File, ref: facturaInputRef }] : [])
                     ].map((item: any) => {
-                      const doc = docs.find(d => d.nombre_archivo.includes(item.tipo));
+                      const doc = docs.find(d => d.tipo_documento === mapTipo(item.tipo) || (!d.tipo_documento && d.nombre_archivo.includes(item.tipo)));
                       const Icon = item.icon;
                       const isCartaMutuo = item.tipo === 'Carta Mutuo Crédito';
                       const hasDataMutuo = isCartaMutuo && cartaMutuoDatos;
@@ -2295,6 +1837,7 @@ export default function CarpetaClient({ negocio }: Props) {
                           
                           <p className="text-sm font-bold text-slate-800">{item.tipo}</p>
                           <p className="text-[10px] text-slate-500 mt-1 px-2 truncate w-full" title={doc ? doc.usuario_email : undefined}>{doc ? `${doc.usuario_email || 'Usuario'} • ${format(new Date(doc.created_at), "dd/MM/yyyy HH:mm")}` : (hasDataMutuo ? 'Datos obtenidos desde Google Sheet' : item.desc)}</p>
+
                           
                           {isCartaMutuo && !isCompleted && !isConsultingMutuo && (
                             <div className="flex flex-col gap-2 w-full mt-4">
@@ -2379,60 +1922,27 @@ export default function CarpetaClient({ negocio }: Props) {
                           )}
 
                           {isCompleted && (
-                            <span className="absolute top-3 right-12 flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-green-700 shadow-sm">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                            </span>
-                          )}
-                          {doc && <CvDocBadge doc={doc} />}
-
-                          {doc && item.tipo === 'Nota de Venta' && (
-                            <div className="w-full mt-4 flex flex-col items-center justify-center border-t border-slate-100 pt-3">
-                              {firmaJefaturaNV === 'FIRMADA' ? (
-                                <div className="flex flex-col items-center text-center w-full">
-                                  <div className="text-xs text-green-700 font-bold bg-green-100 py-1.5 px-3 rounded-lg border border-green-200 w-full mb-2">Aprobado por Jefatura</div>
-                                  {(negocio as any).firma_jefatura_resuelta_por && (
-                                    <p className="text-[10px] text-slate-500 mb-2">Aprobado por {(negocio as any).firma_jefatura_resuelta_por} el {format(new Date((negocio as any).firma_jefatura_resuelta_en), "dd/MM/yy HH:mm")}</p>
-                                  )}
-                                  {['JEFE', 'ADMIN', 'GERENCIA'].includes(userRole) && (
-                                    <button onClick={(e) => { e.stopPropagation(); handleFirmaNV('RECHAZADA'); }} className="w-full text-xs text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 font-bold py-1.5 px-3 rounded-lg transition-colors mt-1">Cambiar a Rechazado</button>
-                                  )}
+                            <>
+                              {!doc && hasDataMutuo && (
+                                <div className="absolute top-3 right-3 flex gap-1.5">
+                                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-green-500 text-white shadow-sm">
+                                    <Check className="w-3.5 h-3.5" />
+                                  </span>
                                 </div>
-                              ) : firmaJefaturaNV === 'RECHAZADA' ? (
-                                <div className="flex flex-col items-center text-center w-full">
-                                  <div className="text-xs text-red-700 font-bold bg-red-100 py-1.5 px-3 rounded-lg border border-red-200 mb-2">Rechazado por Jefatura</div>
-                                  {(negocio as any).firma_jefatura_resuelta_por && (
-                                    <p className="text-[10px] text-slate-500 mb-2">Rechazado por {(negocio as any).firma_jefatura_resuelta_por} el {format(new Date((negocio as any).firma_jefatura_resuelta_en), "dd/MM/yy HH:mm")}</p>
-                                  )}
-                                  <button onClick={(e) => { e.stopPropagation(); handleFirmaNV('SOLICITADA'); }} className="w-full text-xs text-slate-700 bg-slate-100 border border-slate-300 hover:bg-slate-200 font-bold py-1.5 px-3 rounded-lg transition-colors">Volver a Solicitar Firma</button>
-                                </div>
-                              ) : firmaJefaturaNV === 'SOLICITADA' ? (
-                                <div className="flex flex-col items-center text-center w-full">
-                                  {['JEFE', 'ADMIN', 'GERENCIA'].includes(userRole) ? (
-                                    <div className="flex gap-2 w-full">
-                                      <button onClick={(e) => { e.stopPropagation(); handleFirmaNV('FIRMADA'); }} className="flex-1 text-xs text-white bg-green-500 hover:bg-green-600 font-bold py-1.5 px-2 rounded-lg transition-colors text-center">Aprobar</button>
-                                      <button onClick={(e) => { e.stopPropagation(); handleFirmaNV('RECHAZADA'); }} className="flex-1 text-xs text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 font-bold py-1.5 px-2 rounded-lg transition-colors text-center">Rechazar</button>
-                                    </div>
-                                  ) : (
-                                    <div className="text-xs text-amber-700 font-bold bg-amber-100 py-1.5 px-3 rounded-lg border border-amber-200">Firma Solicitada (Pendiente)</div>
-                                  )}
-                                  {(negocio as any).firma_jefatura_solicitada_por && (
-                                    <p className="text-[10px] text-slate-500 mt-1">Solicitado por {(negocio as any).firma_jefatura_solicitada_por} el {format(new Date((negocio as any).firma_jefatura_solicitada_en), "dd/MM/yy HH:mm")}</p>
-                                  )}
-                                </div>
-                              ) : (
-                                <button onClick={(e) => { e.stopPropagation(); handleFirmaNV('SOLICITADA'); }} className="w-full text-xs text-slate-700 bg-slate-100 border border-slate-300 hover:bg-slate-200 font-bold py-1.5 px-3 rounded-lg transition-colors">Solicitar Firma Jefatura</button>
                               )}
-                            </div>
+                              {doc && <RenderBotonesValidacion elemento_id={doc.id} absolute={true} />}
+                            </>
                           )}
+                          {doc && null}
                         </div>
                       );
                     })}
-                    {docs.filter(d => !d.es_firmado && !['Ficha Conocimiento Cliente', 'Nota de Venta', 'Carnet Identidad Cliente', 'Aporte Marca Z126', 'Carta Mutuo Crédito', 'Retoma Auto Usado', 'RNVM', 'Factura'].some(rt => d.nombre_archivo.includes(rt))).map(doc => (
+                    {docs.filter(d => !d.es_firmado && (d.tipo_documento === 'OTRO' || (!d.tipo_documento && !['Ficha Conocimiento Cliente', 'Nota de Venta', 'Carnet Identidad Cliente', 'Aporte Marca Z126', 'Carta Mutuo Crédito', 'Retoma Auto Usado', 'RNVM', 'Factura'].some(rt => d.nombre_archivo.includes(rt))))).map(doc => (
                       <div 
                         key={doc.id}
                         className="relative p-5 rounded-2xl border-2 border-solid border-slate-200 transition-all flex flex-col items-center justify-center text-center bg-white hover:border-slate-300 hover:shadow-md"
                       >
-                        <CvDocBadge doc={doc} />
+
                         <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3 bg-slate-100 text-slate-600">
                           <File className="w-5 h-5" />
                         </div>
@@ -2531,16 +2041,7 @@ export default function CarpetaClient({ negocio }: Props) {
               </div>
             ) : rightActiveTab === 'firmados' ? (
               <div className="h-full flex flex-col bg-slate-50/50 rounded-2xl shadow-sm border border-slate-200">
-                <div className="px-6 py-5 border-b border-slate-200 bg-white rounded-t-2xl flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                      <FileSignature className="w-5 h-5 text-blue-600" />
-                      Documentos Firmados
-                    </h3>
-                    <p className="text-sm text-slate-500 mt-0.5">Sube aquí los contratos y documentos legales finalizados</p>
-                  </div>
-                </div>
-                <div className="p-6 overflow-y-auto flex-1">
+                <div className="p-6 flex-1">
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {/* Tarjeta RNVM especial colocada en 1er lugar */}
                     {(() => {
@@ -2565,13 +2066,23 @@ export default function CarpetaClient({ negocio }: Props) {
                           <p className="text-[10px] text-slate-500 mt-1 px-2 truncate w-full" title={rnvmDoc ? rnvmDoc.usuario_email : undefined}>{rnvmDoc ? `${rnvmDoc.usuario_email || 'Usuario'} • ${format(new Date(rnvmDoc.created_at), "dd/MM/yyyy HH:mm")}` : '(RNVM se generará de manera automática)'}</p>
                           
                           {!rnvmDoc && (
-                            <div className="flex gap-2 mt-4 items-center w-full justify-center">
+                            <div className="flex flex-col gap-2 mt-4 items-center w-full justify-center">
                               <button 
                                 onClick={(e) => { e.stopPropagation(); handleGenerateRNVM(); }}
-                                className="flex items-center justify-center gap-1.5 py-1.5 px-4 bg-indigo-600 text-white font-medium text-xs rounded-lg hover:bg-indigo-700 shadow-sm transition-colors text-center"
+                                className="flex items-center justify-center gap-1.5 py-1.5 px-4 bg-indigo-600 text-white font-medium text-xs rounded-lg hover:bg-indigo-700 shadow-sm transition-colors w-full text-center"
                               >
-                                <FileSignature className="w-3.5 h-3.5 shrink-0" /> <span className="whitespace-normal">Generar Documento y Guardar</span>
+                                <FileSignature className="w-3.5 h-3.5 shrink-0" /> <span className="whitespace-normal">Generar Documento</span>
                               </button>
+                              <a 
+                                href={`/templates/rnvm_template.pdf?v=${Date.now()}`}
+                                target="_blank"
+                                download="RNVM_En_Blanco.pdf"
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex items-center justify-center gap-1.5 py-1.5 px-4 bg-white text-slate-700 border border-slate-300 font-medium text-xs rounded-lg hover:bg-slate-50 shadow-sm transition-colors w-full text-center"
+                                title="Descargar plantilla en blanco para llenado manual"
+                              >
+                                <Download className="w-3.5 h-3.5 shrink-0" /> <span className="whitespace-normal">Descargar en blanco</span>
+                              </a>
                             </div>
                           )}
 
@@ -2620,12 +2131,8 @@ export default function CarpetaClient({ negocio }: Props) {
                               </div>
                             </div>
                           )}
-                          {rnvmDoc && <CvDocBadge doc={rnvmDoc} />}
-                          {rnvmDoc && (
-                            <span className="absolute top-3 right-12 flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-green-700 shadow-sm">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                            </span>
-                          )}
+                          {rnvmDoc && null}
+                          {rnvmDoc && <RenderBotonesValidacion elemento_id={rnvmDoc.id} absolute={true} />}
                         </div>
                       );
                     })()}
@@ -2654,13 +2161,23 @@ export default function CarpetaClient({ negocio }: Props) {
                           </p>
 
                           {!mppDoc && (
-                            <div className="flex gap-2 mt-4 items-center w-full justify-center">
+                            <div className="flex flex-col gap-2 mt-4 items-center w-full justify-center">
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleGenerateMPP(); }}
-                                className="flex items-center justify-center gap-1.5 py-1.5 px-4 bg-indigo-600 text-white font-medium text-xs rounded-lg hover:bg-indigo-700 shadow-sm transition-colors text-center"
+                                className="flex items-center justify-center gap-1.5 py-1.5 px-4 bg-indigo-600 text-white font-medium text-xs rounded-lg hover:bg-indigo-700 shadow-sm transition-colors text-center w-full"
                               >
-                                <FileSignature className="w-3.5 h-3.5 shrink-0" /> <span className="whitespace-normal">Generar Documento y Guardar</span>
+                                <FileSignature className="w-3.5 h-3.5 shrink-0" /> <span className="whitespace-normal">Generar Documento</span>
                               </button>
+                              <a 
+                                href={`/templates/mpp_template.pdf?v=${Date.now()}`}
+                                target="_blank"
+                                download="MPP_En_Blanco.pdf"
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex items-center justify-center gap-1.5 py-1.5 px-4 bg-white text-slate-700 border border-slate-300 font-medium text-xs rounded-lg hover:bg-slate-50 shadow-sm transition-colors w-full text-center"
+                                title="Descargar plantilla en blanco para llenado manual"
+                              >
+                                <Download className="w-3.5 h-3.5 shrink-0" /> <span className="whitespace-normal">Descargar en blanco</span>
+                              </a>
                             </div>
                           )}
 
@@ -2709,12 +2226,8 @@ export default function CarpetaClient({ negocio }: Props) {
                               </div>
                             </div>
                           )}
-                          {mppDoc && <CvDocBadge doc={mppDoc} />}
-                          {mppDoc && (
-                            <span className="absolute top-3 right-12 flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-green-700 shadow-sm">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                            </span>
-                          )}
+                          {mppDoc && null}
+                          {mppDoc && <RenderBotonesValidacion elemento_id={mppDoc.id} absolute={true} />}
                         </div>
                       );
                     })()}
@@ -2811,12 +2324,7 @@ export default function CarpetaClient({ negocio }: Props) {
                               </div>
                             </div>
                           )}
-                          {pepDoc && <CvDocBadge doc={pepDoc} />}
-                          {pepDoc && (
-                            <span className="absolute top-3 right-12 flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-green-700 shadow-sm">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                            </span>
-                          )}
+                          {pepDoc && <RenderBotonesValidacion elemento_id={pepDoc.id} absolute={true} />}
                         </div>
                       );
                     })()}
@@ -2913,12 +2421,8 @@ export default function CarpetaClient({ negocio }: Props) {
                               </div>
                             </div>
                           )}
-                          {pepEmpDoc && <CvDocBadge doc={pepEmpDoc} />}
-                          {pepEmpDoc && (
-                            <span className="absolute top-3 right-12 flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-green-700 shadow-sm">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                            </span>
-                          )}
+                          {pepEmpDoc && null}
+                          {pepEmpDoc && <RenderBotonesValidacion elemento_id={pepEmpDoc.id} absolute={true} />}
                         </div>
                       );
                     })()}
@@ -2996,21 +2500,17 @@ export default function CarpetaClient({ negocio }: Props) {
                               </div>
                             </div>
                           )}
-                          {djbfDoc && <CvDocBadge doc={djbfDoc} />}
-                          {djbfDoc && (
-                            <span className="absolute top-3 right-12 flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-green-700 shadow-sm">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                            </span>
-                          )}
+                          {djbfDoc && null}
+                          {djbfDoc && <RenderBotonesValidacion elemento_id={djbfDoc.id} absolute={true} />}
                         </div>
                       );
                     })()}
-                    {docs.filter(d => d.es_firmado && !d.nombre_archivo.includes('RNVM') && !d.nombre_archivo.includes('MPP') && !d.nombre_archivo.includes('PEP_PERSONA') && !d.nombre_archivo.includes('PEP_EMPRESA') && !d.nombre_archivo.includes('DJBF')).map(doc => (
+                    {docs.filter(d => d.es_firmado && (d.tipo_documento === 'OTRO' || (!d.tipo_documento && !d.nombre_archivo.includes('RNVM') && !d.nombre_archivo.includes('MPP') && !d.nombre_archivo.includes('PEP_PERSONA') && !d.nombre_archivo.includes('PEP_EMPRESA') && !d.nombre_archivo.includes('DJBF')))).map(doc => (
                       <div 
                         key={doc.id}
                         className="relative p-5 rounded-2xl border-2 border-solid border-slate-200 transition-all flex flex-col items-center justify-center text-center bg-white hover:border-slate-300 hover:shadow-md"
                       >
-                        <CvDocBadge doc={doc} />
+
                         <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3 bg-blue-50 text-blue-600">
                           <Check className="w-6 h-6" />
                         </div>
@@ -3081,6 +2581,7 @@ export default function CarpetaClient({ negocio }: Props) {
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           )}
+                          <RenderBotonesValidacion elemento_id={doc.id} absolute={true} />
                         </div>
                       </div>
                     ))}
@@ -3121,6 +2622,63 @@ export default function CarpetaClient({ negocio }: Props) {
                   className="hidden" 
                   accept=".pdf,.png,.jpg,.jpeg"
                 />
+              </div>
+            ) : rightActiveTab === 'historial' ? (
+              <div className="mb-0">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-3 bg-amber-100 text-amber-600 rounded-xl">
+                    <Activity className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold text-slate-800">Historial del Negocio</h3>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                  {historial.length === 0 ? (
+                    <div className="text-center py-10 text-slate-500">
+                      <Activity className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                      <p>No hay eventos registrados en el historial todavía.</p>
+                    </div>
+                  ) : (
+                    <div className="relative pl-6 border-l-2 border-slate-100 space-y-8">
+                      {historial.map((evento, idx) => {
+                        let Icono = Activity;
+                        let iconBg = "bg-slate-100 text-slate-500";
+                        
+                        if (evento.tipo_evento === 'CREACION' || evento.tipo_evento === 'CREACION_NEGOCIO') {
+                          Icono = Star;
+                          iconBg = "bg-yellow-100 text-yellow-600";
+                        } else if (evento.tipo_evento === 'DOCUMENTO_CARGADO' || evento.tipo_evento === 'SISTEMA') {
+                          Icono = Paperclip;
+                          iconBg = "bg-blue-100 text-blue-600";
+                        } else if (evento.tipo_evento === 'VALIDACION') {
+                          Icono = evento.descripcion.includes('APROBADO') || evento.descripcion.includes('Visto Bueno') ? Check : X;
+                          iconBg = evento.descripcion.includes('APROBADO') || evento.descripcion.includes('Visto Bueno') ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600";
+                        } else if (evento.tipo_evento === 'KANBAN') {
+                          Icono = ArrowRight;
+                          iconBg = "bg-purple-100 text-purple-600";
+                        }
+
+                        return (
+                          <div key={evento.id || idx} className="relative">
+                            <div className={`absolute -left-[37px] p-1.5 rounded-full border-[3px] border-white ${iconBg}`}>
+                              <Icono className="w-4 h-4" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-sm font-semibold text-slate-800">{evento.descripcion}</span>
+                              <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 font-medium">
+                                <span>{evento.usuario_email.split('@')[0]}</span>
+                                <span>•</span>
+                                <span>{format(new Date(evento.created_at), "dd MMM yyyy, HH:mm", { locale: es })}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             ) : null}
            </div>

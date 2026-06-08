@@ -26,11 +26,6 @@ export default async function NegociosPage() {
     .select("*")
     .order("created_at", { ascending: false });
 
-  if (userRole === "ADMINISTRATIVO") {
-    // El valor en BD cuando la jefatura aprueba la Nota de Venta es "FIRMADA"
-    query = query.eq("firma_jefatura_nv", "FIRMADA");
-  }
-
   const { data: negocios, error } = await query;
 
   if (error) {
@@ -45,7 +40,7 @@ export default async function NegociosPage() {
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold leading-7 text-slate-900 sm:truncate sm:text-3xl sm:tracking-tight">
-            Flujo de Facturación
+            Pedidos de Ventas
           </h1>
         </div>
       </div>

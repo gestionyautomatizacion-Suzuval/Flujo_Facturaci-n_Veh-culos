@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Calculator, Save, AlertCircle } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Calculator, Save, AlertCircle, Loader2, Check } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 
 interface ParametrosSII {
+  id: string;
   anio: number;
   mes: number;
   utm: number | null;
@@ -14,6 +15,9 @@ export default function PermisoCirculacionClient() {
   const [anio] = useState<number>(new Date().getFullYear());
   const [utmData, setUtmData] = useState<Record<number, ParametrosSII>>({});
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [calculoPcId, setCalculoPcId] = useState<string | null>(null);
 
   // Valores de Vehículo
   const [valorVehiculo, setValorVehiculo] = useState<number>(0);
@@ -33,25 +37,78 @@ export default function PermisoCirculacionClient() {
 
   const supabase = createClient();
 
-  useEffect(() => {
-    async function fetchUtm() {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("parametros_sii")
-        .select("anio, mes, utm")
-        .eq("anio", anio);
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    
+    // 1. Fetch UTMs del año actual
+    const { data: utms } = await supabase
+      .from("parametros_sii")
+      .select("id, anio, mes, utm")
+      .eq("anio", anio);
 
-      if (!error && data) {
-        const map: Record<number, ParametrosSII> = {};
-        data.forEach((r: any) => {
-          map[r.mes] = r;
-        });
-        setUtmData(map);
-      }
-      setLoading(false);
+    const utmMap: Record<number, ParametrosSII> = {};
+    if (utms) {
+      utms.forEach((r: any) => { utmMap[r.mes] = r; });
     }
-    fetchUtm();
+    setUtmData(utmMap);
+
+    // 2. Fetch configuración Singleton de calculo_pc
+    const { data: pcConfig } = await supabase
+      .from("calculo_pc")
+      .select("*")
+      .limit(1)
+      .maybeSingle();
+
+    if (pcConfig) {
+      setCalculoPcId(pcConfig.id);
+      setInscripcion(Number(pcConfig.inscripcion) || 0);
+      setSeguroObligatorio(Number(pcConfig.seguro_obligatorio) || 0);
+      setSelloVerde(Number(pcConfig.sello_verde) || 0);
+      setImpuestoVerde(Number(pcConfig.impuesto_verde) || 0);
+      setMesFacturaA(pcConfig.mes_factura_a || new Date().getMonth() + 1);
+      setMesFacturaB(pcConfig.mes_factura_b || 13 - (new Date().getMonth() + 1));
+      setFacturarProximoMes(pcConfig.facturar_proximo_mes || "NO");
+      setModificarValor(pcConfig.modificar_valor_vehiculo || "NO");
+    }
+
+    setLoading(false);
   }, [anio, supabase]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Handle Guardar en Base de Datos
+  const handleSave = async () => {
+    if (!calculoPcId) return;
+    setSaving(true);
+    
+    // Identificar el ID del parametro_sii correspondiente al mes y año seleccionado
+    const paramSiiId = utmData[mesFacturaA]?.id || null;
+
+    const { error } = await supabase
+      .from("calculo_pc")
+      .update({
+        inscripcion,
+        seguro_obligatorio: seguroObligatorio,
+        sello_verde: selloVerde,
+        impuesto_verde: impuestoVerde,
+        mes_factura_a: mesFacturaA,
+        mes_factura_b: mesFacturaB,
+        facturar_proximo_mes: facturarProximoMes,
+        modificar_valor_vehiculo: modificarValor,
+        parametro_sii_id: paramSiiId
+      })
+      .eq("id", calculoPcId);
+
+    setSaving(false);
+    if (!error) {
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } else {
+      alert("Error al guardar: " + error.message);
+    }
+  };
 
   // Cálculos derivados
   const mesUtm = mesFacturaA;
@@ -245,7 +302,13 @@ export default function PermisoCirculacionClient() {
                     </td>
                   </tr>
                   <tr className="border-b border-slate-200">
-                    <td className="w-1/3 py-3 px-4 font-medium text-slate-700 bg-slate-50 border-r border-slate-200">Impuesto Verde</td>
+                    <td className="w-1/3 py-3 px-4 font-medium text-slate-700 bg-slate-50 border-r border-slate-200">
+                      Impuesto Verde (
+                      <a href="https://www4.sii.cl/calcImpVehiculoNuevoInternet/internet.html" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                        Revisar en SII.cl
+                      </a>
+                      )
+                    </td>
                     <td className="p-0">
                       <input 
                         type="number" 
@@ -327,9 +390,27 @@ export default function PermisoCirculacionClient() {
                </p>
             </div>
             
-            <button className="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm">
-              <Save className="w-5 h-5" />
-              Guardar Parámetros
+            <button 
+              onClick={handleSave}
+              disabled={saving || !calculoPcId}
+              className="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Guardando...
+                </>
+              ) : saveSuccess ? (
+                <>
+                  <Check className="w-5 h-5 text-emerald-300" />
+                  ¡Guardado correctamente!
+                </>
+              ) : (
+                <>
+                  <Save className="w-5 h-5" />
+                  Guardar Parámetros
+                </>
+              )}
             </button>
           </div>
         </div>

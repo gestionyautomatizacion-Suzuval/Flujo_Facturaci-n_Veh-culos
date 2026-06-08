@@ -51,14 +51,7 @@ function LoginContent() {
       <div className="relative w-full max-w-md p-8 overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl">
         <div className="relative z-20 flex flex-col items-center">
           
-          <div className="mb-6 flex items-center justify-center">
-            <Image src="/logo.png" alt="Suzuval Logo" width={140} height={140} className="object-contain" priority />
-          </div>
-
-          <h1 className="mb-2 text-3xl font-bold tracking-tight text-slate-800">Facturación Vehículos</h1>
-          <p className="mb-10 text-center text-sm font-medium text-slate-500">
-            Sistema Comercial Suzuval
-          </p>
+          <h1 className="mb-10 text-3xl font-bold tracking-tight text-center text-slate-800">Facturación Vehículos Nuevos</h1>
 
           {errorMsg && (
              <div className="mb-6 flex w-full items-center gap-3 rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-600">
@@ -93,11 +86,7 @@ function LoginContent() {
             )}
           </button>
           
-          <div className="mt-8 text-center text-xs text-slate-400">
-            &copy; {new Date().getFullYear()} Suzuval. Todos los derechos reservados.
-            <br />
-            Plataforma interna segura.
-          </div>
+
         </div>
       </div>
     </div>

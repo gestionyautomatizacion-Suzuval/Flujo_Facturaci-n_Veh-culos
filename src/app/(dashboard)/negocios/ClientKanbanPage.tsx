@@ -78,7 +78,7 @@ export default function ClientKanbanPage({ initialData, userRole = "VENDEDOR" }:
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por PV, interno, centro, creador o cliente..."
+            placeholder="Buscar por PV, interno, centro, creador, cliente o fecha..."
             className="w-full h-[38px] pl-9 pr-8 rounded-xl border border-slate-200 bg-white/80 backdrop-blur-sm text-sm text-slate-700 placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
           />
           {searchTerm && (
@@ -119,7 +119,7 @@ export default function ClientKanbanPage({ initialData, userRole = "VENDEDOR" }:
           onClick={() => setIsModalOpen(true)}
           className="inline-flex h-[38px] items-center justify-center rounded-xl bg-blue-800 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-all active:scale-95 whitespace-nowrap"
         >
-          + Nuevo Negocio
+          + Nuevo Pedido Venta
         </button>
       </div>
       

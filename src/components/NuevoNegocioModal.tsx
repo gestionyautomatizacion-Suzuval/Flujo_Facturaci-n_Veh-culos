@@ -37,12 +37,15 @@ interface Props {
   onSuccess: () => void;
 }
 
+interface Sucursal { id: string; nombre: string; }
+
 export default function NuevoNegocioModal({ onClose, onSuccess }: Props) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [userRole, setUserRole] = useState<string>("");
   const [userSucursales, setUserSucursales] = useState<string[]>([]);
+  const [sucursalesDB, setSucursalesDB] = useState<Sucursal[]>([]);
   const [hasPrepagoVigente, setHasPrepagoVigente] = useState(false);
   
   // Estado para autocompletado del Vehículo
@@ -59,12 +62,9 @@ export default function NuevoNegocioModal({ onClose, onSuccess }: Props) {
   const supabase = createClient();
 
   useEffect(() => {
-    // Al montar, obtener el correo del usuario logueado automáticamente y su perfil para las sucursales
     const getUserData = async () => {
       const { data: authData } = await supabase.auth.getUser();
-      if (authData?.user?.email) {
-        setUserEmail(authData.user.email);
-      }
+      if (authData?.user?.email) setUserEmail(authData.user.email);
 
       if (authData?.user?.id) {
         const { data: perfil } = await supabase
@@ -72,13 +72,34 @@ export default function NuevoNegocioModal({ onClose, onSuccess }: Props) {
           .select("rol, sucursales")
           .eq("id", authData.user.id)
           .single();
-        
         if (perfil) {
           setUserRole(perfil.rol);
-          if (perfil.sucursales && perfil.sucursales.length > 0) {
-            setUserSucursales(perfil.sucursales);
-          }
+          if (perfil.sucursales && perfil.sucursales.length > 0) setUserSucursales(perfil.sucursales);
         }
+      }
+
+      // Cargar sucursales desde BD
+      try {
+        const { data: sucs, error } = await supabase
+          .from("sucursales")
+          .select("id, nombre")
+          .eq("activa", true)
+          .order("id");
+        if (sucs && sucs.length > 0) {
+          setSucursalesDB(sucs);
+        } else {
+          throw new Error("Sin datos");
+        }
+      } catch (e) {
+        setSucursalesDB([
+          { id: "C026", nombre: "CF. LA CALERA" },
+          { id: "C027", nombre: "CF. VIÑA DEL MAR" },
+          { id: "C028", nombre: "CF. VALPARAISO" },
+          { id: "C031", nombre: "CF. SAN ANTONIO" },
+          { id: "C041", nombre: "CF. CONCON" },
+          { id: "C157", nombre: "CF. ESPACIO URBANO" },
+          { id: "C168", nombre: "CF. MELIPILLA" },
+        ]);
       }
     };
     getUserData();
@@ -174,6 +195,8 @@ export default function NuevoNegocioModal({ onClose, onSuccess }: Props) {
         const templateInserts = baseTemplates.map(template => ({
           pedido_venta: insertedData.pedido_venta,
           nombre_archivo: `${template}.pdf`,
+          tipo_documento: template,
+          estado_validacion: null,
           url: `https://xcamqzutgvrplhzvmlka.supabase.co/storage/v1/object/public/documentos_firmados/${template}.pdf`,
           tamano_kb: 50,
           usuario_email: 'sistema',
@@ -184,6 +207,13 @@ export default function NuevoNegocioModal({ onClose, onSuccess }: Props) {
         if (insertTemplatesError) {
           console.error("Error insertando las plantillas:", insertTemplatesError);
         }
+
+        await supabase.from("negocios_historial").insert([{
+          pedido_venta: insertedData.pedido_venta,
+          tipo_evento: 'CREACION_NEGOCIO',
+          descripcion: `Negocio creado`,
+          usuario_email: userEmail || 'Sistema'
+        }]);
       }
 
       onSuccess();
@@ -335,45 +365,22 @@ export default function NuevoNegocioModal({ onClose, onSuccess }: Props) {
 
             {/* Campos Ocultos Autodetectados */}
             <input type="hidden" name="vendedor_nombre" value={userEmail} />
-            <select name="suc_vta" className="hidden" defaultValue={userSucursales[0] ? (
-              {
-                'C026': 'C026 - CF. LA CALERA',
-                'C027': 'C027 - CF. VIÑA DEL MAR',
-                'C028': 'C028 - CF. VALPARAISO',
-                'C031': 'C031 - CF. SAN ANTONIO',
-                'C041': 'C041 - CF. CONCON',
-                'C157': 'C157 - CF. ESPACIO URBANO',
-                'C168': 'C168 - CF. MELIPILLA'
-              }[userSucursales[0]] || userSucursales[0]
-            ) : "C026 - CF. LA CALERA"}>
-                {/* Si es rol global o no tiene sucursales cargadas aún (o fallback general) */}
-                {(["ADMIN", "GERENCIA", "ADMINISTRATIVO"].includes(userRole) || userSucursales.length === 0) ? (
-                  <>
-                    <option value="C026 - CF. LA CALERA">C026 - CF. LA CALERA</option>
-                    <option value="C027 - CF. VIÑA DEL MAR">C027 - CF. VIÑA DEL MAR</option>
-                    <option value="C028 - CF. VALPARAISO">C028 - CF. VALPARAISO</option>
-                    <option value="C031 - CF. SAN ANTONIO">C031 - CF. SAN ANTONIO</option>
-                    <option value="C041 - CF. CONCON">C041 - CF. CONCON</option>
-                    <option value="C157 - CF. ESPACIO URBANO">C157 - CF. ESPACIO URBANO</option>
-                    <option value="C168 - CF. MELIPILLA">C168 - CF. MELIPILLA</option>
-                  </>
-                ) : (
-                  // Es vendedor o jefe con sucursales asignadas
-                  userSucursales.map(suc_codigo => {
-                    const mapNombres: Record<string, string> = {
-                      'C026': 'C026 - CF. LA CALERA',
-                      'C027': 'C027 - CF. VIÑA DEL MAR',
-                      'C028': 'C028 - CF. VALPARAISO',
-                      'C031': 'C031 - CF. SAN ANTONIO',
-                      'C041': 'C041 - CF. CONCON',
-                      'C157': 'C157 - CF. ESPACIO URBANO',
-                      'C168': 'C168 - CF. MELIPILLA'
-                    };
-                    const nombreFormateado = mapNombres[suc_codigo] || suc_codigo;
-                    return <option key={suc_codigo} value={nombreFormateado}>{nombreFormateado}</option>;
-                  })
-                )}
-            </select>
+            {(() => {
+              // Construir opciones desde BD
+              const opcionesSuc: Sucursal[] =
+                ["ADMIN", "GERENCIA", "ADMINISTRATIVO"].includes(userRole) || userSucursales.length === 0
+                  ? sucursalesDB
+                  : sucursalesDB.filter(s => userSucursales.includes(s.id));
+              const defaultVal = opcionesSuc.length > 0 ? `${opcionesSuc[0].id} - ${opcionesSuc[0].nombre}` : "";
+              return (
+                <select name="suc_vta" className="hidden" defaultValue={defaultVal}>
+                  {opcionesSuc.map(suc => {
+                    const val = `${suc.id} - ${suc.nombre}`;
+                    return <option key={suc.id} value={val}>{val}</option>;
+                  })}
+                </select>
+              );
+            })()}
 
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 mt-4">
               <div className="space-y-1">

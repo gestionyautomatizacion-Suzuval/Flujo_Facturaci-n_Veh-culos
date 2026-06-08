@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
-import { Calendar, User, Building2, CreditCard, ChevronRight, Trash2, Eye } from "lucide-react";
+import { Calendar, User, Building2, CreditCard, ChevronRight, Trash2, Eye, ArrowDown, ArrowUp } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { createClient } from "@/utils/supabase/client";
@@ -24,31 +24,25 @@ export interface Negocio {
   saldo: string;
   estado: EstadoNegocio;
   created_at: string;
-  precio_lista?: number;
-  bono_marca?: number;
-  bono_amicar_suzuval?: number;
-  bono_amicar_inchcape?: number;
-  flete_grabado?: number;
-  venta_accesorios_mantencion?: number;
-  mantencion_10000?: number;
-  mantencion_20000?: number;
-  mantencion_30000?: number;
-  firma_jefatura_nv?: string | null;
-  primer_admin_email?: string | null;
-  primer_admin_fecha?: string | null;
   carta_mutuo_datos?: any;
 }
 
 const KANBAN_COLUMNS: { id: EstadoNegocio; title: string; color: string; border: string }[] = [
-  { id: 'PARA_REVISIÓN', title: 'Pendiente Revisión', color: 'bg-blue-50', border: 'border-blue-200' },
-  { id: 'REVISADO_EN_ESPERA', title: 'Negocios con Observaciones', color: 'bg-amber-50', border: 'border-amber-200' },
-  { id: 'REVISADO_OK', title: 'Negocios Ok Revisados', color: 'bg-emerald-50', border: 'border-emerald-200' },
-  { id: 'FACTURADO', title: 'Facturados', color: 'bg-purple-50', border: 'border-purple-200' }
+  { id: 'PARA_REVISIÓN', title: 'Pendiente de Revisión', color: 'bg-blue-50', border: 'border-blue-200' },
+  { id: 'REVISADO_EN_ESPERA', title: 'En Revisión', color: 'bg-amber-50', border: 'border-amber-200' },
+  { id: 'REVISADO_OK', title: 'OK Revisado', color: 'bg-emerald-50', border: 'border-emerald-200' },
+  { id: 'FACTURADO', title: 'Facturado', color: 'bg-purple-50', border: 'border-purple-200' }
 ];
 
 export default function KanbanBoard({ initialData, isAdmin = false, canDelete = false, cardSize = 'large', searchTerm = '', unreadChats = new Set() }: { initialData: Negocio[], isAdmin?: boolean, canDelete?: boolean, cardSize?: string, searchTerm?: string, unreadChats?: Set<string> }) {
   const [data, setData] = useState<Negocio[]>([]);
   const [isMounted, setIsMounted] = useState(false);
+  const [sortOrders, setSortOrders] = useState<Record<EstadoNegocio, 'desc' | 'asc'>>({
+    PARA_REVISIÓN: 'desc',
+    REVISADO_EN_ESPERA: 'desc',
+    REVISADO_OK: 'desc',
+    FACTURADO: 'desc'
+  });
   const [confirmAction, setConfirmAction] = useState<{
     destinationId: EstadoNegocio;
     sourceId: EstadoNegocio;
@@ -92,6 +86,11 @@ export default function KanbanBoard({ initialData, isAdmin = false, canDelete = 
     if (!destination) return;
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
     if (!isAdmin) return; // Validación extra manual
+
+    if (destination.droppableId === 'FACTURADO') {
+      alert("⛔ Acción denegada: El estado FACTURADO solo se alcanza de manera automática al adjuntar el documento 'Factura' en la carpeta del negocio. No se permiten cambios manuales.");
+      return;
+    }
 
     const sourceIndex = KANBAN_COLUMNS.findIndex(C => C.id === source.droppableId);
     const destIndex = KANBAN_COLUMNS.findIndex(C => C.id === destination.droppableId);
@@ -137,6 +136,12 @@ export default function KanbanBoard({ initialData, isAdmin = false, canDelete = 
           comentario: `[AUDITORIA]|Estado del negocio cambiado: ${confirmAction.sourceTitle} -> ${confirmAction.destTitle}`,
           usuario_email: authData?.user?.email || 'Sistema'
         }]);
+        await supabase.from('negocios_historial').insert([{
+          pedido_venta: draggableId,
+          tipo_evento: 'KANBAN',
+          descripcion: `Estado cambiado: ${confirmAction.sourceTitle} -> ${confirmAction.destTitle}`,
+          usuario_email: authData?.user?.email || 'Sistema'
+        }]);
       }
     }
   };
@@ -150,13 +155,16 @@ export default function KanbanBoard({ initialData, isAdmin = false, canDelete = 
   // Filtrar por PV, interno, suc_vta (centro) o vendedor_nombre (correo del creador)
   const q = searchTerm.trim().toLowerCase();
   const filteredData = q
-    ? data.filter(n =>
-        (n.pedido_venta || '').toLowerCase().includes(q) ||
+    ? data.filter(n => {
+        const dateStr = format(new Date(n.created_at), "dd/MM/yy").toLowerCase();
+        
+        return (n.pedido_venta || '').toLowerCase().includes(q) ||
         (n.interno || '').toLowerCase().includes(q) ||
         (n.suc_vta || '').toLowerCase().includes(q) ||
         (n.vendedor_nombre || '').toLowerCase().includes(q) ||
-        (n.nombre_apellido || '').toLowerCase().includes(q)
-      )
+        (n.nombre_apellido || '').toLowerCase().includes(q) ||
+        dateStr.includes(q);
+      })
     : data;
 
   return (
@@ -164,12 +172,33 @@ export default function KanbanBoard({ initialData, isAdmin = false, canDelete = 
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="flex h-full gap-4 overflow-x-auto pb-4">
           {KANBAN_COLUMNS.map(column => {
-            const columnItems = filteredData.filter(item => item.estado === column.id);
+            const columnItems = filteredData
+              .filter(item => item.estado === column.id)
+              .sort((a, b) => {
+                const order = sortOrders[column.id];
+                const timeA = new Date(a.created_at).getTime();
+                const timeB = new Date(b.created_at).getTime();
+                return order === 'asc' ? timeA - timeB : timeB - timeA;
+              });
 
             return (
               <div key={column.id} className={`flex h-full w-80 shrink-0 flex-col rounded-xl border ${column.border} ${column.color} p-4`}>
                 <div className="mb-4 flex items-center justify-between">
-                  <h3 className="font-semibold text-slate-700">{column.title}</h3>
+                  <h3 className="font-semibold text-slate-700 flex items-center gap-2">
+                    {column.title}
+                    <button
+                      onClick={() => {
+                        setSortOrders(prev => ({
+                          ...prev,
+                          [column.id]: prev[column.id] === 'desc' ? 'asc' : 'desc'
+                        }));
+                      }}
+                      className="p-1 hover:bg-black/5 rounded text-slate-400 hover:text-slate-600 transition-colors"
+                      title={sortOrders[column.id] === 'desc' ? "Ordenar ascendente" : "Ordenar descendente"}
+                    >
+                      {sortOrders[column.id] === 'desc' ? <ArrowDown className="w-3.5 h-3.5" /> : <ArrowUp className="w-3.5 h-3.5" />}
+                    </button>
+                  </h3>
                   <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-500 shadow-sm">
                     {columnItems.length}
                   </span>
@@ -215,7 +244,7 @@ export default function KanbanBoard({ initialData, isAdmin = false, canDelete = 
                                 <div>
                                   <div className="mb-1.5 text-center leading-none">
                                     <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider leading-none">
-                                      Creado {format(new Date(item.created_at), "d MMM, yy - HH:mm", { locale: es })}
+                                      Creado {format(new Date(item.created_at), "dd/MM/yy - HH:mm", { locale: es })}
                                     </span>
                                   </div>
                                   <div className="flex items-center justify-between mb-1">
@@ -235,19 +264,8 @@ export default function KanbanBoard({ initialData, isAdmin = false, canDelete = 
                                     <div className="flex flex-col">
                                       <div className="flex items-center truncate mb-1">
                                         <Building2 className="mr-1 h-3 w-3 shrink-0" />
-                                        <span className="truncate">{item.suc_vta.split('-')[1]?.trim() || item.suc_vta}</span>
+                                        <span className="truncate">{item.suc_vta ? (item.suc_vta.includes('-') ? item.suc_vta.split('-')[1]?.trim() : item.suc_vta) : 'Sin sucursal'}</span>
                                       </div>
-                                      {item.primer_admin_email ? (
-                                        <span className="flex items-center gap-1 text-[9px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded w-max border border-blue-100" title="Primer Administrativo en revisar">
-                                          <Eye className="h-2.5 w-2.5 shrink-0" />
-                                          <span className="truncate max-w-[80px]">{item.primer_admin_email.split('@')[0]}</span>
-                                          <span className="opacity-60 shrink-0">• {format(new Date(item.primer_admin_fecha!), "dd/MM HH:mm")}</span>
-                                        </span>
-                                      ) : (
-                                        <span className="flex items-center text-[9px] text-slate-300">
-                                          <Eye className="mr-1 h-2.5 w-2.5" /> Sin rev. Control Ventas
-                                        </span>
-                                      )}
                                     </div>
                                     <div className="flex items-center gap-1 self-end">
                                       {canDelete && (
@@ -270,7 +288,7 @@ export default function KanbanBoard({ initialData, isAdmin = false, canDelete = 
                                 <div>
                                   <div className="mb-2 text-center leading-none">
                                     <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-none">
-                                      Creado {format(new Date(item.created_at), "d MMM, yy - HH:mm", { locale: es })}
+                                      Creado {format(new Date(item.created_at), "dd/MM/yy - HH:mm", { locale: es })}
                                     </span>
                                   </div>
                                   <div className="mb-3 flex items-start justify-between">
@@ -299,45 +317,27 @@ export default function KanbanBoard({ initialData, isAdmin = false, canDelete = 
 
                                   <div className="space-y-2 text-xs text-slate-500">
                                     <div className="flex items-center">
-                                      <User className="mr-1.5 h-3.5 w-3.5" />
+                                      <User className="mr-1.5 h-3.5 w-3.5 shrink-0" />
                                       <span className="truncate">{item.vendedor_nombre}</span>
                                     </div>
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center truncate">
-                                        <Building2 className="mr-1.5 h-3.5 w-3.5" />
-                                        <span className="truncate">{item.suc_vta}</span>
+                                        <Building2 className="mr-1.5 h-3.5 w-3.5 shrink-0" />
+                                        <span className="truncate">{item.suc_vta || 'Sin sucursal'}</span>
                                       </div>
-                                    </div>
-                                  </div>
-                                  
-                                  <hr className="my-3 border-slate-100" />
-                                  
-                                  <div className="flex items-center justify-between text-xs">
-                                    <div className="flex flex-col text-[10px] text-slate-400 font-medium">
-                                      {item.primer_admin_email ? (
-                                        <span className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-100" title="Primer Administrativo en revisar">
-                                          <Eye className="h-3.5 w-3.5 shrink-0" />
-                                          <span className="truncate max-w-[120px]">{item.primer_admin_email.split('@')[0]}</span>
-                                          <span className="opacity-60 shrink-0">• {format(new Date(item.primer_admin_fecha!), "dd/MM HH:mm")}</span>
-                                        </span>
-                                      ) : (
-                                        <span className="flex items-center text-slate-300">
-                                          <Eye className="mr-1 h-3.5 w-3.5" /> Sin revisión de Control Ventas
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                      {canDelete && (
-                                        <button 
-                                            onClick={(e) => handleDeleteNegocio(item.pedido_venta, e)}
-                                            className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-50 text-slate-400 transition-colors hover:bg-red-100 hover:text-red-600"
-                                            title="Eliminar Negocio"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
-                                      )}
-                                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-50 text-slate-400 transition-colors group-hover:bg-blue-100 group-hover:text-blue-600">
-                                        <ChevronRight className="h-4 w-4" />
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        {canDelete && (
+                                          <button 
+                                              onClick={(e) => handleDeleteNegocio(item.pedido_venta, e)}
+                                              className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-50 text-slate-400 transition-colors hover:bg-red-100 hover:text-red-600"
+                                              title="Eliminar Negocio"
+                                          >
+                                              <Trash2 className="h-4 w-4" />
+                                          </button>
+                                        )}
+                                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-50 text-slate-400 transition-colors group-hover:bg-blue-100 group-hover:text-blue-600">
+                                          <ChevronRight className="h-4 w-4" />
+                                        </div>
                                       </div>
                                     </div>
                                   </div>

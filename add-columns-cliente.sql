@@ -1,5 +1,0 @@
-ALTER TABLE negocios ADD COLUMN IF NOT EXISTS direccion_cliente TEXT;
-ALTER TABLE negocios ADD COLUMN IF NOT EXISTS region_cliente TEXT;
-ALTER TABLE negocios ADD COLUMN IF NOT EXISTS comuna_cliente TEXT;
-ALTER TABLE negocios ADD COLUMN IF NOT EXISTS mail_cliente TEXT;
-ALTER TABLE negocios ADD COLUMN IF NOT EXISTS movil_cliente TEXT;

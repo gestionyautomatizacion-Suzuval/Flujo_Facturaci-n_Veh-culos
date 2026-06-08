@@ -71,23 +71,42 @@ export default function CalculoPapeles({ valorVehiculoBruto, onUpdateValores, va
   const supabase = createClient();
 
   useEffect(() => {
-    async function fetchUtm() {
+    async function fetchData() {
       setLoading(true);
-      const { data, error } = await supabase
+      
+      // 1. Obtener UTM
+      const { data: utms, error } = await supabase
         .from("parametros_sii")
         .select("anio, mes, utm")
         .eq("anio", anio);
 
-      if (!error && data) {
+      if (!error && utms) {
         const map: Record<number, ParametrosSII> = {};
-        data.forEach((r: any) => {
-          map[r.mes] = r;
-        });
+        utms.forEach((r: any) => { map[r.mes] = r; });
         setUtmData(map);
       }
+
+      // 2. Obtener configuración global de calculo_pc
+      const { data: pcConfig } = await supabase
+        .from("calculo_pc")
+        .select("*")
+        .limit(1)
+        .maybeSingle();
+
+      if (pcConfig) {
+        // Solo sobreescribir si no hay valores actuales (es una cuadratura nueva)
+        if (!valoresActuales.inscripcion) setInscripcion(Number(pcConfig.inscripcion) || 0);
+        if (!valoresActuales.soap_sello_verde) setSeguroObligatorio(Number(pcConfig.seguro_obligatorio) || 0);
+        if (!valoresActuales.impuesto_verde) setImpuestoVerde(Number(pcConfig.impuesto_verde) || 0);
+        
+        setSelloVerde(Number(pcConfig.sello_verde) || 0);
+        setMesFacturaA(pcConfig.mes_factura_a || new Date().getMonth() + 1);
+        setMesFacturaB(pcConfig.mes_factura_b || 13 - (new Date().getMonth() + 1));
+      }
+
       setLoading(false);
     }
-    fetchUtm();
+    fetchData();
   }, [anio]);
 
   // Cálculos derivados
@@ -288,7 +307,13 @@ export default function CalculoPapeles({ valorVehiculoBruto, onUpdateValores, va
                     </td>
                   </tr>
                   <tr className="border-b border-slate-200">
-                    <td className="w-1/3 py-3 px-4 font-medium text-slate-700 bg-slate-50 border-r border-slate-200">Impuesto Verde</td>
+                    <td className="w-1/3 py-3 px-4 font-medium text-slate-700 bg-slate-50 border-r border-slate-200">
+                      Impuesto Verde (
+                      <a href="https://www4.sii.cl/calcImpVehiculoNuevoInternet/internet.html" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                        Revisar en SII.cl
+                      </a>
+                      )
+                    </td>
                     <td className="p-0">
                       <input 
                         type="number" 

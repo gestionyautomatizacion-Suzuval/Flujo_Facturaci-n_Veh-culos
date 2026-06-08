@@ -1,19 +1,14 @@
 import { Activity, Car, CheckCircle2, AlertCircle, CalendarRange } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
 import { startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
-import MetaMensualCard from "@/components/MetaMensualCard";
 
 export default async function DashboardSummary() {
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
-  let metaMensual = 12; // default fallback
   let isAdmin = false;
   if (user) {
-    const { data: perfil } = await supabase.from("perfiles").select("meta_mensual, rol").eq("id", user.id).single();
-    if (perfil && perfil.meta_mensual !== null) {
-      metaMensual = perfil.meta_mensual;
-    }
+    const { data: perfil } = await supabase.from("perfiles").select("rol").eq("id", user.id).single();
     if (perfil?.rol === "ADMIN") {
       isAdmin = true;
     }
@@ -55,63 +50,34 @@ export default async function DashboardSummary() {
     .gte("created_at", firstDayYear)
     .lte("created_at", lastDayYear);
 
-  const META_MENSUAL = 12;
   const avanceMes = countFacturadosMes || 0;
-  const percentMes = Math.round((avanceMes / META_MENSUAL) * 100);
 
   const stats = [
-    { name: "Pendiente Revisión", value: countRevision?.toString() || "0", icon: Car, color: "text-blue-500", bg: "bg-blue-50" },
-    { name: "Negocios con Observaciones", value: countObservaciones?.toString() || "0", icon: AlertCircle, color: "text-amber-500", bg: "bg-amber-50" },
-    { name: "Negocios Ok Revisados", value: countOk?.toString() || "0", icon: CheckCircle2, color: "text-emerald-500", bg: "bg-emerald-50" },
-    { 
-      name: "Facturados en el Mes", 
-      value: avanceMes.toString(), 
-      icon: Activity, 
-      color: "text-purple-500", 
-      bg: "bg-purple-50",
-      extra: `Meta del mes: ${META_MENSUAL} (${percentMes}%)`
-    },
-    { name: "Total Facturado Año", value: countFacturadosAno?.toString() || "0", icon: CalendarRange, color: "text-indigo-500", bg: "bg-indigo-50" },
+    { name: "Pedidos Pendientes de Revisión", value: countRevision?.toString() || "0", icon: Car, color: "text-blue-500", bg: "bg-blue-50" },
+    { name: "Pedidos en Revisión", value: countObservaciones?.toString() || "0", icon: AlertCircle, color: "text-amber-500", bg: "bg-amber-50" },
+    { name: "Pedidos Ok Revisados", value: countOk?.toString() || "0", icon: CheckCircle2, color: "text-emerald-500", bg: "bg-emerald-50" },
+    { name: "Pedidos Facturados en el Mes", value: avanceMes.toString(), icon: Activity, color: "text-purple-500", bg: "bg-purple-50" },
+    { name: "Pedidos Facturados", value: countFacturadosAno?.toString() || "0", icon: CalendarRange, color: "text-indigo-500", bg: "bg-indigo-50" },
   ];
 
   return (
     <div className="mx-auto max-w-7xl">
       <div className="mb-8">
         <h1 className="text-2xl font-bold leading-7 text-slate-900 sm:truncate sm:text-3xl sm:tracking-tight">
-          Mis Pedidos de Ventas
+          Pedidos de Venta
         </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Resumen general del estado de facturación y negocios.
-        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {stats.map((stat) => {
-          if (stat.name === "Facturados en el Mes") {
-            return (
-              <MetaMensualCard 
-                key={stat.name} 
-                countFacturadosMes={avanceMes} 
-                initialMeta={metaMensual} 
-              />
-            );
-          }
-          
-          return (
-            <div key={stat.name} className="relative overflow-hidden rounded-2xl bg-white p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-              <div className={`absolute right-4 top-4 rounded-xl p-3 ${stat.bg}`}>
-                <stat.icon className={`h-6 w-6 ${stat.color}`} />
-              </div>
-              <p className="text-sm font-medium text-slate-500 pr-12">{stat.name}</p>
-              <p className="mt-4 text-3xl font-bold tracking-tight text-slate-900">{stat.value}</p>
-              {stat.extra && (
-                <p className="mt-2 text-xs font-semibold text-purple-600 bg-purple-50/50 w-fit px-2 py-1 rounded-md border border-purple-100">
-                  {stat.extra}
-                </p>
-              )}
+        {stats.map((stat) => (
+          <div key={stat.name} className="relative overflow-hidden rounded-2xl bg-white p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+            <div className={`absolute right-4 top-4 rounded-xl p-3 ${stat.bg}`}>
+              <stat.icon className={`h-6 w-6 ${stat.color}`} />
             </div>
-          );
-        })}
+            <p className="text-sm font-medium text-slate-500 pr-12">{stat.name}</p>
+            <p className="mt-4 text-3xl font-bold tracking-tight text-slate-900">{stat.value}</p>
+          </div>
+        ))}
       </div>
 
       {isAdmin && (

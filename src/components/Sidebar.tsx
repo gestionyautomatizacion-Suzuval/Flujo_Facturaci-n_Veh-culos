@@ -4,12 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
-import Image from "next/image";
+
 import { 
   CarFront, 
   LayoutDashboard, 
   KanbanSquare, 
-  MessageSquare, 
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -20,28 +19,14 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [mostrarConfig, setMostrarConfig] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [hasUnreadChat, setHasUnreadChat] = useState(false);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  
   const supabase = createClient();
 
-  // Limpiar el estado de "no leído" si entramos a la vista de chats
   useEffect(() => {
-    if (pathname === "/chats") {
-      setHasUnreadChat(false);
-    }
-  }, [pathname]);
-
-  useEffect(() => {
-    let channel: any = null;
 
     const initSidebar = async () => {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData?.user) return;
       
-      const email = userData.user.email || null;
-      setUserEmail(email);
-
       // Verificamos nivel de gerente
       const { data } = await supabase
         .from("perfiles")
@@ -52,59 +37,27 @@ export default function Sidebar() {
       if (data && (data.rol === "ADMIN" || data.rol === "GERENCIA")) {
         setMostrarConfig(true);
       }
-
-      if (email) {
-        // Escuchar por nuevos mensajes dirigidos a mí en los chats
-        channel = supabase.channel('sidebar-chat-notifs')
-          .on('postgres_changes', {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'chat_messages'
-          }, (payload) => {
-            // Verificar que no sea mi propio mensaje
-            if (payload.new.sender_email !== email) {
-              if (pathname !== "/chats") {
-                setHasUnreadChat(true);
-              }
-            }
-          })
-          .on('postgres_changes', {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'chat_rooms'
-          }, (payload) => {
-             // Si hay una sala nueva, probablemente también es un chat nuevo 
-             // (aunque dependería de las participaciones, así que ser un poco reactivo).
-             if (pathname !== "/chats") {
-               setHasUnreadChat(true);
-             }
-          })
-          .subscribe();
-      }
     };
     
     initSidebar();
-
-    return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
-    };
   }, [pathname]);
 
   const navigation = [
-    { name: "Inicio - Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "Calcular Valores", href: "/formularios", icon: CarFront },
-    { name: "Flujo de Negocios", href: "/negocios", icon: KanbanSquare },
-    { name: "Firmas Digitales", href: "/firmas", icon: FileSignature },
-    { name: "Chat / Contactos", href: "/chats", icon: MessageSquare, hasBadge: hasUnreadChat },
+    { name: "Inicio", href: "/", icon: LayoutDashboard },
+    { name: "Cuadratura de Valores", href: "/formularios", icon: CarFront },
+    { name: "Pedidos de Ventas", href: "/negocios", icon: KanbanSquare },
+    { name: "Clientes / Firmas Digitales", href: "/firmas", icon: FileSignature },
   ];
 
   return (
     <div className={`relative hidden md:flex flex-col border-r border-slate-200 bg-slate-50 transition-all duration-300 ${isCollapsed ? 'w-20' : 'w-56'}`}>
       <div className={`flex h-16 shrink-0 items-center border-b border-slate-200 font-bold tracking-tight text-blue-900 bg-white ${isCollapsed ? 'justify-center px-0' : 'px-4'}`}>
-        <Image src="/logo.png" alt="Suzuval Logo" width={36} height={36} className="shrink-0 object-contain" />
-        {!isCollapsed && <span className="ml-2 truncate text-sm">Facturación Vehículos</span>}
+        {!isCollapsed && (
+          <div className="flex flex-col text-center w-full text-base leading-tight">
+            <span>Facturación</span>
+            <span>Vehículos Nuevos</span>
+          </div>
+        )}
       </div>
       
       <div className="flex flex-1 flex-col overflow-y-auto">
@@ -131,12 +84,6 @@ export default function Sidebar() {
                     }`}
                     aria-hidden="true"
                   />
-                  {item.hasBadge && (
-                    <span className={`absolute ${isCollapsed ? 'top-[-4px] right-[-4px]' : 'top-[-2px] right-2'} flex h-2.5 w-2.5`}>
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500 ring-2 ring-white"></span>
-                    </span>
-                  )}
                 </div>
                 {!isCollapsed && <span className="truncate">{item.name}</span>}
               </Link>
