@@ -16,7 +16,6 @@ interface Cuadratura {
   precio_final: number;
   saldo_pendiente: number;
   perfil_id?: string | null;
-  perfil_id?: string | null;
   perfiles?: {
     nombre_completo: string | null;
   } | null;
