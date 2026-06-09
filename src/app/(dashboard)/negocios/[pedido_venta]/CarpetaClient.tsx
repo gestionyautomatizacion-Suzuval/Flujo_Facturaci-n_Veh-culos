@@ -325,7 +325,7 @@ export default function CarpetaClient({ negocio }: Props) {
         auditMsg = "Estado del negocio regresado automáticamente a Pendiente Revisión";
       }
 
-      let currentNormalized = negocio.estado;
+      let currentNormalized = negocio.estado as string;
       if (currentNormalized === 'APROBADO' || currentNormalized === 'REVISADO OK') currentNormalized = 'REVISADO_OK';
       if (currentNormalized === 'PARA_REVISIÓN') currentNormalized = 'PARA_REVISION';
 
@@ -596,11 +596,11 @@ export default function CarpetaClient({ negocio }: Props) {
 
       // Obtener mantenciones contratadas desde la cuadratura
       let mantDataFetched = null;
-      if (negocio.cuadratura_id) {
+      if ((negocio as any).cuadratura_id) {
         const { data: mantData } = await supabase
           .from("mantencion_prepagada")
           .select("mantencion_10000, mantencion_20000, mantencion_30000")
-          .eq("cuadratura_id", negocio.cuadratura_id)
+          .eq("cuadratura_id", (negocio as any).cuadratura_id)
           .maybeSingle();
           
         if (mantData) {
@@ -1228,7 +1228,7 @@ export default function CarpetaClient({ negocio }: Props) {
 
   const handleValidacionCentral = async (elemento_id: string, accionEstado: 'APROBADO' | 'RECHAZADO') => {
     const currentVal = validaciones.find(v => v.elemento_id === elemento_id);
-    let nuevoEstado = accionEstado;
+    let nuevoEstado: string = accionEstado;
     
     if (currentVal && currentVal.estado === accionEstado) {
       nuevoEstado = 'PENDIENTE';
@@ -1383,7 +1383,7 @@ export default function CarpetaClient({ negocio }: Props) {
           { id: 'FACTURADO', label: 'FACTURADO', activeBg: 'bg-blue-600 text-white' },
         ];
 
-        let normalizedEstado = negocio.estado;
+        let normalizedEstado = negocio.estado as string;
         if (normalizedEstado === 'PARA_REVISION') normalizedEstado = 'PARA_REVISIÓN';
         if (normalizedEstado === 'APROBADO' || normalizedEstado === 'REVISADO OK') normalizedEstado = 'REVISADO_OK';
 

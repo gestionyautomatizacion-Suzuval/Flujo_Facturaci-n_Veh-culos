@@ -297,7 +297,7 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
       <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <span className="text-slate-500 font-bold text-xs uppercase tracking-wider">
-            ID Cuadratura cargado: <span className="text-indigo-600">{data.id_cuadratura || `#${data.id}`}</span>
+            Folio: <span className="text-indigo-600">{(data as any).id_cuadratura || `#${data.id}`}</span>
           </span>
           <button
             onClick={() => router.push(`/formularios/${data.id}`)}
@@ -472,8 +472,8 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
                   { label: "Derco Z126",       v: data.aporte_marca_derco_z126, pct: pctOf(data.aporte_marca_derco_z126 || 0) },
                   { label: "Amicar Derco",    v: data.bono_amicar_derco,       pct: pctOf(data.bono_amicar_derco || 0) },
                   { label: "Total Derco",      v: (data.aporte_marca_derco_z126 || 0) + (data.bono_amicar_derco || 0), pct: pctOf((data.aporte_marca_derco_z126 || 0) + (data.bono_amicar_derco || 0)), hl: true },
-                ] as const).map((r, i) => (
-                  <div key={i} className={`flex border-b border-slate-300 py-1 ${r.hl ? "bg-sky-200" : ""}`}>
+                ] as const).map((r, idx) => (
+                  <div key={idx} className={`flex border-b border-slate-300 py-1 ${(r as any).hl ? "bg-sky-200" : ""}`}>
                     <div className="flex-[2] border-r border-slate-300 px-2">{r.label}</div>
                     <div className="w-14 border-r border-slate-300 text-center">{formatPct(r.pct)}</div>
                     <div className="flex-1 text-right pr-2 font-mono">{(r.v || 0) ? formatCLP(r.v as number) : ""}</div>
