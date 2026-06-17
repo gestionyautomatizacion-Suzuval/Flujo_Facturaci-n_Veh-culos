@@ -44,7 +44,6 @@ interface CuadraturaRow {
 interface INegocio {
   pedido_venta?: string | number;
   cuadratura_id?: number | string;
-  [key: string]: unknown;
 }
 
 interface ICliente {
@@ -490,14 +489,14 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
             <div className="flex text-xs border border-slate-400 font-bold">
               <div className="w-20 border-r border-slate-400 flex items-center justify-center p-2 text-center text-slate-500 bg-slate-50 uppercase">Resumen<br/>Dctos</div>
               <div className="flex-1 flex flex-col bg-sky-50">
-                {([
+                {[
                   { label: "Suzuval ZQDV",    v: data.dcto_suzuval_zqdv,       pct: pctOf(data.dcto_suzuval_zqdv || 0) },
                   { label: "Amicar Suzuval",  v: data.bono_amicar_suzuval,     pct: pctOf(data.bono_amicar_suzuval || 0) },
                   { label: "Total Suzuval",    v: (data.dcto_suzuval_zqdv || 0) + (data.bono_amicar_suzuval || 0), pct: pctOf((data.dcto_suzuval_zqdv || 0) + (data.bono_amicar_suzuval || 0)), hl: true },
                   { label: "Derco Z126",       v: data.aporte_marca_derco_z126, pct: pctOf(data.aporte_marca_derco_z126 || 0) },
                   { label: "Amicar Derco",    v: data.bono_amicar_derco,       pct: pctOf(data.bono_amicar_derco || 0) },
                   { label: "Total Derco",      v: (data.aporte_marca_derco_z126 || 0) + (data.bono_amicar_derco || 0), pct: pctOf((data.aporte_marca_derco_z126 || 0) + (data.bono_amicar_derco || 0)), hl: true },
-                ] as const).map((r, idx) => (
+                ].map((r, idx) => (
                   <div key={idx} className={`flex border-b border-slate-300 py-1 ${r.hl ? "bg-sky-200" : ""}`}>
                     <div className="flex-[2] border-r border-slate-300 px-2">{r.label}</div>
                     <div className="w-14 border-r border-slate-300 text-center">{formatPct(r.pct)}</div>
