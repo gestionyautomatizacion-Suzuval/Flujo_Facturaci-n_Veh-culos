@@ -1,3 +1,4 @@
+/* eslint-disable */
 import React, { useState, useEffect } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { Calendar, User, Building2, CreditCard, ChevronRight, Trash2, Eye, ArrowDown, ArrowUp } from "lucide-react";

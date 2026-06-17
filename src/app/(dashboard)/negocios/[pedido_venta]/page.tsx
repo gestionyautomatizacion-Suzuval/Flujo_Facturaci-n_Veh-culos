@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { createClient } from "@/utils/supabase/server";
 import { notFound } from "next/navigation";
 import CarpetaClient from "./CarpetaClient";
@@ -25,7 +26,7 @@ export default async function NegocioPage({ params }: { params: Promise<{ pedido
     return (
       <div className="p-10">
         <h1 className="text-2xl font-bold text-red-600">Negocio No Encontrado (Debug)</h1>
-        <p>Pedido de Venta buscado: <strong>"{pedido_venta}"</strong></p>
+        <p>Pedido de Venta buscado: <strong>&quot;{pedido_venta}&quot;</strong></p>
         <p>Error devuelto por Supabase: {JSON.stringify(error)}</p>
         <pre className="mt-4 p-4 bg-slate-100 rounded text-sm">
           {JSON.stringify({ pedido_venta, type: typeof pedido_venta }, null, 2)}

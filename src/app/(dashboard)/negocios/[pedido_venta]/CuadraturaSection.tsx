@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
-import { Loader2, Calculator, ChevronDown, ExternalLink, Save, Search } from "lucide-react";
+import { Loader2, Calculator, ExternalLink, Save, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 const formatCLP = (n: number) => (n != null ? Number(n).toLocaleString("es-CL") : "0");
@@ -17,6 +17,7 @@ interface MantencionRow {
 
 interface CuadraturaRow {
   id: number;
+  id_cuadratura?: string;
   created_at: string;
   cod_modelo: string;
   marca: string | null;
@@ -40,61 +41,129 @@ interface CuadraturaRow {
   cliente_id: string | null;
 }
 
+interface INegocio {
+  pedido_venta?: string | number;
+  cuadratura_id?: number | string;
+  [key: string]: unknown;
+}
+
+interface ICliente {
+  id: string;
+  rut: string;
+  nombre: string;
+  segundo_nombre: string | null;
+  apellido: string;
+  segundo_apellido: string | null;
+  [key: string]: unknown;
+}
+
 interface Props {
-  negocio?: any;
+  negocio?: INegocio;
   onCuadraturaLinked?: (cliente_id: string, rut: string, nombre_apellido: string) => void;
   renderValidacion?: (elemento_id: string) => React.ReactNode;
 }
 
+// ── Header Component extracted out of render ──
+interface HeaderControlsProps {
+  renderValidacion?: (elemento_id: string) => React.ReactNode;
+  folioInput: string;
+  setFolioInput: (v: string) => void;
+  handleCargar: () => void;
+  handleVincular: () => void;
+  selected: CuadraturaRow | null;
+  negocio?: INegocio;
+  isLinked: boolean;
+  isSaving: boolean;
+}
+
+const HeaderControls = ({
+  renderValidacion,
+  folioInput,
+  setFolioInput,
+  handleCargar,
+  handleVincular,
+  selected,
+  negocio,
+  isLinked,
+  isSaving
+}: HeaderControlsProps) => (
+  <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
+    <div className="flex items-center gap-2">
+      <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+        <Calculator className="w-4 h-4 text-indigo-500" /> Cuadratura de Valores
+      </h4>
+      {renderValidacion && renderValidacion("CUADRATURA")}
+    </div>
+    <div className="flex items-center gap-2">
+      <div className="relative flex items-center gap-2">
+        <input
+          type="text"
+          placeholder=""
+          className="w-40 text-sm border border-slate-300 rounded-md px-3 py-1.5 focus:outline-none focus:border-indigo-500 shadow-sm"
+          value={folioInput}
+          onChange={(e) => setFolioInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleCargar()}
+        />
+        <button
+          onClick={handleCargar}
+          className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center shadow-sm"
+        >
+          <Search className="w-3.5 h-3.5 mr-1.5" /> Cargar
+        </button>
+      </div>
+
+      {selected && (negocio?.cuadratura_id !== selected.id || isLinked) && (
+        <button
+          onClick={handleVincular}
+          disabled={isSaving || isLinked}
+          className={`${isLinked ? "bg-emerald-600 hover:bg-emerald-700" : "bg-indigo-600 hover:bg-indigo-700"} text-white px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50`}
+        >
+          {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+          {isLinked ? "Guardado" : "Guardar"}
+        </button>
+      )}
+    </div>
+  </div>
+);
+
 export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderValidacion }: Props) {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<CuadraturaRow | null>(null);
-  const [clienteData, setClienteData] = useState<any>(null);
+  const [clienteData, setClienteData] = useState<ICliente | null>(null);
   const [mantenciones, setMantenciones] = useState<Record<number, MantencionRow>>({});
   const [error, setError] = useState("");
-  const [hasLoaded, setHasLoaded] = useState(false);
+  const hasLoadedRef = useRef(false);
   
-  const [folioInput, setFolioInput] = useState(""); // Input string para el ID Cuadratura
+  const [folioInput, setFolioInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isLinked, setIsLinked] = useState(false);
 
   const supabase = createClient();
   const router = useRouter();
 
-  // Si ya tiene una cuadratura vinculada, la cargamos
-  useEffect(() => {
-    if (negocio?.cuadratura_id && !hasLoaded) {
-      setHasLoaded(true);
-      loadCuadraturaByFolio(negocio.cuadratura_id);
-    }
-  }, [negocio?.cuadratura_id]);
-
-  const loadCuadraturaByFolio = async (folioTerm: string | number) => {
+  const loadCuadraturaByFolio = useCallback(async (folioTerm: string | number) => {
     if (!folioTerm) return;
     setLoading(true);
     setError("");
 
-    let cuadData = null;
+    let cuadData: CuadraturaRow | null = null;
 
     if (typeof folioTerm === "number") {
       const { data } = await supabase.from("cuadratura_valores_cliente").select("*").eq("id", folioTerm).maybeSingle();
-      cuadData = data;
+      cuadData = data as CuadraturaRow;
     } else {
       const term = folioTerm.trim();
-      // 1. Intentar por match exacto de id_cuadratura
-      let { data } = await supabase.from("cuadratura_valores_cliente").select("*").eq("id_cuadratura", term).maybeSingle();
-      cuadData = data;
+      const { data } = await supabase.from("cuadratura_valores_cliente").select("*").eq("id_cuadratura", term).maybeSingle();
+      cuadData = data as CuadraturaRow;
       
-      // 2. Si no encuentra y es numérico puro, intentar por ID
       if (!cuadData && /^\d+$/.test(term)) {
         const { data: byId } = await supabase.from("cuadratura_valores_cliente").select("*").eq("id", Number(term)).maybeSingle();
-        cuadData = byId;
+        cuadData = byId as CuadraturaRow;
       }
       
-      // 3. Si aún no, intentar con LIKE (por si ingresó 1001 y el folio es 1001_rut)
       if (!cuadData) {
         const { data: byLike } = await supabase.from("cuadratura_valores_cliente").select("*").ilike("id_cuadratura", `${term}%`).maybeSingle();
-        cuadData = byLike;
+        cuadData = byLike as CuadraturaRow;
       }
     }
 
@@ -105,8 +174,7 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
       return;
     }
 
-    // 2. Cargar cliente asociado
-    let cData = null;
+    let cData: ICliente | null = null;
     if (cuadData.cliente_id) {
       const { data: cliente, error: cliErr } = await supabase
         .from("clientes")
@@ -114,21 +182,20 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
         .eq("id", cuadData.cliente_id)
         .maybeSingle();
       if (!cliErr && cliente) {
-        cData = cliente;
-        setClienteData(cliente);
+        cData = cliente as ICliente;
+        setClienteData(cData);
       }
     }
 
-    // 3. Cargar mantenciones
     const { data: mantData } = await supabase
       .from("mantencion_prepagada")
       .select("cuadratura_id, mantencion_10000, mantencion_20000, mantencion_30000")
       .eq("cuadratura_id", cuadData.id);
 
     const mantMap: Record<number, MantencionRow> = {};
-    (mantData ?? []).forEach((m: any) => { mantMap[m.cuadratura_id] = m; });
+    (mantData ?? []).forEach((m: { cuadratura_id: number; mantencion_10000: number; mantencion_20000: number; mantencion_30000: number; }) => { mantMap[m.cuadratura_id] = m; });
 
-    setSelected(cuadData as CuadraturaRow);
+    setSelected(cuadData);
     setMantenciones(mantMap);
     setLoading(false);
     
@@ -138,7 +205,14 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
     }
     
     return { cuadData, cData };
-  };
+  }, [supabase, onCuadraturaLinked]);
+
+  useEffect(() => {
+    if (negocio?.cuadratura_id && !hasLoadedRef.current) {
+      hasLoadedRef.current = true;
+      loadCuadraturaByFolio(negocio.cuadratura_id);
+    }
+  }, [negocio?.cuadratura_id, loadCuadraturaByFolio]);
 
   const handleCargar = async () => {
     const term = folioInput.trim();
@@ -146,7 +220,7 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
       setError("Ingresa un ID de cuadratura");
       return;
     }
-    setHasLoaded(true);
+    hasLoadedRef.current = true;
     setIsLinked(false);
     await loadCuadraturaByFolio(term);
   };
@@ -166,7 +240,6 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
       return;
     }
 
-    // Si hay datos de cliente, los actualizamos o creamos en clientes_datos_negocios
     if (clienteData) {
       const { data: existingData } = await supabase
         .from("clientes_datos_negocios")
@@ -175,13 +248,11 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
         .maybeSingle();
         
       if (!existingData) {
-        // Creamos el registro vacío atado al cliente y negocio
         await supabase.from("clientes_datos_negocios").insert({
           pedido_venta: negocio.pedido_venta,
           cliente_id: clienteData.id,
         });
       } else {
-        // Actualizamos cliente_id por si cambió
         await supabase.from("clientes_datos_negocios").update({
           cliente_id: clienteData.id
         }).eq("id", existingData.id);
@@ -193,7 +264,6 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
       }
     }
 
-    // Insertar en historial
     const { data: { user } } = await supabase.auth.getUser();
     await supabase.from("negocios_historial").insert([{
       pedido_venta: negocio.pedido_venta,
@@ -206,60 +276,29 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
     setIsLinked(true);
   };
 
-  // ── Header Component ──
-  const HeaderControls = () => (
-    <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
-      <div className="flex items-center gap-2">
-        <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-          <Calculator className="w-4 h-4 text-indigo-500" /> Cuadratura de Valores
-        </h4>
-        {renderValidacion && renderValidacion("CUADRATURA")}
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="relative flex items-center gap-2">
-          <input
-            type="text"
-            placeholder=""
-            className="w-40 text-sm border border-slate-300 rounded-md px-3 py-1.5 focus:outline-none focus:border-indigo-500 shadow-sm"
-            value={folioInput}
-            onChange={(e) => setFolioInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleCargar()}
-          />
-          <button
-            onClick={handleCargar}
-            className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center shadow-sm"
-          >
-            <Search className="w-3.5 h-3.5 mr-1.5" /> Cargar
-          </button>
-        </div>
+  const headerProps = {
+    renderValidacion,
+    folioInput,
+    setFolioInput,
+    handleCargar,
+    handleVincular,
+    selected,
+    negocio,
+    isLinked,
+    isSaving
+  };
 
-        {selected && (negocio?.cuadratura_id !== selected.id || isLinked) && (
-          <button
-            onClick={handleVincular}
-            disabled={isSaving || isLinked}
-            className={`${isLinked ? "bg-emerald-600 hover:bg-emerald-700" : "bg-indigo-600 hover:bg-indigo-700"} text-white px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50`}
-          >
-            {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-            {isLinked ? "Guardado" : "Guardar"}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-
-  // ── Empty state ──
   if (!selected && !loading && !error) {
     return (
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
-        <HeaderControls />
+        <HeaderControls {...headerProps} />
         <div className="p-5 text-sm text-slate-400 text-center">
-          Ingresa un ID de cuadratura y haz clic en "Cargar" para visualizar y vincular la cuadratura.
+          Ingresa un ID de cuadratura y haz clic en &quot;Cargar&quot; para visualizar y vincular la cuadratura.
         </div>
       </div>
     );
   }
 
-  // ── Loading ──
   if (loading) {
     return (
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm mb-8 p-8 flex justify-center">
@@ -268,17 +307,15 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
     );
   }
 
-  // ── Error ──
   if (error) {
     return (
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
-        <HeaderControls />
+        <HeaderControls {...headerProps} />
         <div className="p-5 text-sm text-amber-700 bg-amber-50 rounded-b-xl">⚠️ {error}</div>
       </div>
     );
   }
 
-  // ── Loaded with data ──
   const data = selected;
   if (!data) return null;
 
@@ -291,13 +328,12 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
-      <HeaderControls />
+      <HeaderControls {...headerProps} />
 
-      {/* Header Info */}
       <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <span className="text-slate-500 font-bold text-xs uppercase tracking-wider">
-            Folio: <span className="text-indigo-600">{(data as any).id_cuadratura || `#${data.id}`}</span>
+            Folio: <span className="text-indigo-600">{data.id_cuadratura || `#${data.id}`}</span>
           </span>
           <button
             onClick={() => router.push(`/formularios/${data.id}`)}
@@ -307,7 +343,6 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
           </button>
         </div>
 
-        {/* Vehículo y Cliente info */}
         <div className="flex flex-wrap gap-3 text-xs bg-white border border-slate-200 rounded-md px-3 py-2 w-full justify-between items-center">
           <div className="flex flex-wrap gap-3">
             {data.marca && <span className="font-bold uppercase text-slate-600">{data.marca}</span>}
@@ -322,13 +357,9 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
         </div>
       </div>
 
-      {/* Body */}
       <div className="p-5">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
-
-          {/* LADO IZQUIERDO */}
           <div className="flex flex-col gap-5">
-            {/* NEGOCIO */}
             <div className="border border-slate-300 flex">
               <div className="w-10 bg-slate-100 border-r border-slate-300 flex items-center justify-center">
                 <span className="transform -rotate-90 whitespace-nowrap font-bold text-xs text-slate-600 tracking-widest">NEGOCIO</span>
@@ -352,7 +383,7 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
                   { label: "Mantención Prep. 20.000 km", v: mantenciones[data.id]?.mantencion_20000 ?? 0 },
                   { label: "Mantención Prep. 30.000 km", v: mantenciones[data.id]?.mantencion_30000 ?? 0 },
                   { label: "Precio Final", v: data.precio_final, bold: true },
-                ].map((row: any, i) => (
+                ].map((row: { label: string; valor?: string; noNeto?: boolean; v?: number; bold?: boolean }, i) => (
                   <div key={i} className={`flex border-b border-slate-300 text-xs h-[30px] ${row.bold ? "bg-orange-50 font-bold" : ""}`}>
                     <div className="w-1/2 px-2 flex items-center border-r border-slate-300 font-medium">{row.label}</div>
                     {row.noNeto ? (
@@ -368,7 +399,6 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
               </div>
             </div>
 
-            {/* APORTES */}
             <div className="border border-slate-300 flex">
               <div className="w-10 bg-slate-100 border-r border-slate-300 flex items-center justify-center">
                 <span className="transform -rotate-90 whitespace-nowrap font-bold text-xs text-slate-600 tracking-widest">APORTES</span>
@@ -390,7 +420,6 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
               </div>
             </div>
 
-            {/* PAPELES */}
             <div className="border border-slate-300 flex">
               <div className="w-10 bg-slate-100 border-r border-slate-300 flex items-center justify-center">
                 <span className="transform -rotate-90 whitespace-nowrap font-bold text-xs text-slate-600 tracking-widest text-center leading-tight">PAPELES</span>
@@ -423,9 +452,7 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
             </div>
           </div>
 
-          {/* LADO DERECHO */}
           <div className="flex flex-col gap-5">
-            {/* TOTALES */}
             <div className="border border-slate-400">
               <div className="flex border-b border-slate-400 text-sm h-[34px]">
                 <div className="flex-[1.5] px-2 flex items-center border-r border-slate-400 font-bold bg-slate-100">Total Compra</div>
@@ -442,7 +469,6 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
               </div>
             </div>
 
-            {/* SALDO */}
             <div className="border border-slate-400 overflow-hidden">
               <div className="flex border-b border-slate-400 text-sm font-bold">
                 <div className="flex-[1.5] py-2.5 px-3 border-r border-slate-400 flex items-center justify-center bg-slate-100 text-slate-700 uppercase text-xs">Total a Pagar</div>
@@ -461,7 +487,6 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
               )}
             </div>
 
-            {/* RESUMEN DESCUENTOS */}
             <div className="flex text-xs border border-slate-400 font-bold">
               <div className="w-20 border-r border-slate-400 flex items-center justify-center p-2 text-center text-slate-500 bg-slate-50 uppercase">Resumen<br/>Dctos</div>
               <div className="flex-1 flex flex-col bg-sky-50">
@@ -473,7 +498,7 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
                   { label: "Amicar Derco",    v: data.bono_amicar_derco,       pct: pctOf(data.bono_amicar_derco || 0) },
                   { label: "Total Derco",      v: (data.aporte_marca_derco_z126 || 0) + (data.bono_amicar_derco || 0), pct: pctOf((data.aporte_marca_derco_z126 || 0) + (data.bono_amicar_derco || 0)), hl: true },
                 ] as const).map((r, idx) => (
-                  <div key={idx} className={`flex border-b border-slate-300 py-1 ${(r as any).hl ? "bg-sky-200" : ""}`}>
+                  <div key={idx} className={`flex border-b border-slate-300 py-1 ${r.hl ? "bg-sky-200" : ""}`}>
                     <div className="flex-[2] border-r border-slate-300 px-2">{r.label}</div>
                     <div className="w-14 border-r border-slate-300 text-center">{formatPct(r.pct)}</div>
                     <div className="flex-1 text-right pr-2 font-mono">{(r.v || 0) ? formatCLP(r.v as number) : ""}</div>

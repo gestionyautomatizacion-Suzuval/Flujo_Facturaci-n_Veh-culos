@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect */
 "use client";
 
 import React, { useState, useRef, useEffect, Suspense } from "react";

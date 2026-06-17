@@ -21,7 +21,7 @@ export default async function NegociosPage() {
 
   // 2. Traer los negocios desde la Base de Datos, ordenados de más nuevos a más viejos.
   //    Los ADMINISTRATIVOS solo ven negocios cuya Nota de Venta fue aprobada por jefatura.
-  let query = supabase
+  const query = supabase
     .from("negocios")
     .select("*")
     .order("created_at", { ascending: false });

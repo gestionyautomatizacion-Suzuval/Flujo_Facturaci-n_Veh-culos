@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Landmark, Save, RefreshCw, AlertTriangle, CloudDownload, Check } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 
@@ -29,13 +29,9 @@ export default function UtmClient() {
   const [syncing, setSyncing] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
-  useEffect(() => {
-    loadData();
-  }, [anio]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setErrorSQL(false);
     
@@ -58,7 +54,7 @@ export default function UtmClient() {
 
     const map: Record<number, ParametrosSII> = {};
     if (records) {
-      records.forEach((r: any) => {
+      records.forEach((r: ParametrosSII) => {
         map[r.mes] = r;
       });
     }
@@ -81,7 +77,12 @@ export default function UtmClient() {
     
     setData(map);
     setLoading(false);
-  };
+  }, [anio, supabase]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadData();
+  }, [loadData]);
 
   const handleInputChange = (mes: number, field: keyof ParametrosSII, value: string) => {
     const parsed = value === "" ? null : parseFloat(value.replace(",", "."));
@@ -101,7 +102,7 @@ export default function UtmClient() {
         row.utm !== null || row.uta !== null || row.ipc_puntos !== null || 
         row.ipc_mensual !== null || row.ipc_acumulado !== null || row.ipc_12_meses !== null
       )
-      .map((row: any) => ({
+      .map((row: ParametrosSII) => ({
         anio: row.anio,
         mes: row.mes,
         utm: row.utm ?? null,
@@ -143,7 +144,7 @@ export default function UtmClient() {
       
       // Update UTM
       if (utmData && utmData.serie) {
-        utmData.serie.forEach((item: any) => {
+        utmData.serie.forEach((item: { fecha: string; valor: number }) => {
           const date = new Date(item.fecha);
           if (date.getUTCFullYear() === anio) {
             const m = date.getUTCMonth() + 1;
@@ -157,7 +158,7 @@ export default function UtmClient() {
 
       // Update IPC
       if (ipcData && ipcData.serie) {
-        ipcData.serie.forEach((item: any) => {
+        ipcData.serie.forEach((item: { fecha: string; valor: number }) => {
           const date = new Date(item.fecha);
           if (date.getUTCFullYear() === anio) {
             const m = date.getUTCMonth() + 1;

@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
+import Link from "next/link";
 
 export default async function SettingsLayout({
   children,
@@ -36,9 +37,9 @@ export default async function SettingsLayout({
           <p className="text-sm text-red-700/80 mb-6 leading-relaxed">
             Tu nivel de acceso actual (<span className="font-bold">{rol}</span>) no tiene permisos para ingresar a la configuración del sistema ni creación de cuentas.
           </p>
-          <a href="/negocios" className="text-sm font-semibold bg-white px-5 py-2.5 rounded-xl border border-red-200 text-red-800 shadow-sm hover:bg-slate-50 transition-colors">
+          <Link href="/negocios" className="text-sm font-semibold bg-white px-5 py-2.5 rounded-xl border border-red-200 text-red-800 shadow-sm hover:bg-slate-50 transition-colors">
             Volver a Flujos
-          </a>
+          </Link>
         </div>
       </div>
     );

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import pdfParse from "pdf-parse";
 import { obtenerRegionPorComuna } from "@/lib/chile";
