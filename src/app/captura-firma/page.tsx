@@ -3,7 +3,6 @@
 
 import React, { useState, useRef, useEffect, Suspense } from "react";
 import SignatureCanvas from "react-signature-canvas";
-import { createClient } from "@/utils/supabase/client";
 import { Camera, RefreshCcw, CheckCircle, AlertTriangle, Loader2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -113,7 +112,7 @@ function CapturaFirmaForm() {
       setErrorMsg("Debes adjuntar las fotos frontal y trasera del Carnet de Identidad.");
       return;
     }
-    if (sigCanvas.current?.isEmpty()) {
+    if (!sigCanvas.current || sigCanvas.current.isEmpty()) {
       setErrorMsg("Debes firmar en el recuadro blanco.");
       return;
     }
@@ -123,47 +122,35 @@ function CapturaFirmaForm() {
     }
 
     setSubmitting(true);
-    const supabase = createClient();
-    // Extraemos solo los caracteres del RUT para el nombre de archivo
-    const rutSlug = rut.replace(/[^0-9kK]/g, '');
     try {
-      // 1. Subir Foto Frontal
-      const fExt = frontalFile.type.includes('png') ? 'png' : 'jpg';
-      const frontalPath = `capturas/${Date.now()}_front_${rutSlug}.${fExt}`;
-      const { error: fError } = await supabase.storage.from("firmas").upload(frontalPath, frontalFile);
-      if (fError) throw new Error(`Error Frontal: ${fError.message}`);
+      // Convertir la firma a Blob usando canvas.toBlob() (compatible con todos los móviles).
+      // fetch(dataUrl) NO es compatible con todos los navegadores móviles.
+      const firmaBlob: Blob = await new Promise((resolve, reject) => {
+        sigCanvas.current.getTrimmedCanvas().toBlob(
+          (blob: Blob | null) => {
+            if (blob) resolve(blob);
+            else reject(new Error("No se pudo obtener la imagen de la firma."));
+          },
+          "image/png"
+        );
+      });
 
-      // 2. Subir Foto Trasera
-      const tExt = traseroFile.type.includes('png') ? 'png' : 'jpg';
-      const traseroPath = `capturas/${Date.now()}_back_${rutSlug}.${tExt}`;
-      const { error: tError } = await supabase.storage.from("firmas").upload(traseroPath, traseroFile);
-      if (tError) throw new Error(`Error Trasero: ${tError.message}`);
+      // Enviar todo al API route del servidor (service_role bypasea RLS)
+      // Esto garantiza que funciona en móviles sin sesión activa.
+      const form = new FormData();
+      form.append("rut", rut);
+      form.append("vendedor", vendedor);
+      form.append("autorizacion", String(autorizacion));
+      form.append("frontal", frontalFile);
+      form.append("trasero", traseroFile);
+      form.append("firma", firmaBlob, "firma.png");
 
-      // 3. Obtener Firma y subir
-      const firmaDataUrl = sigCanvas.current.getTrimmedCanvas().toDataURL('image/png');
-      const firmaRes = await fetch(firmaDataUrl);
-      const firmaBlob = await firmaRes.blob();
-      const firmaPath = `capturas/${Date.now()}_firma_${rutSlug}.png`;
-      const { error: sigError } = await supabase.storage.from("firmas").upload(firmaPath, firmaBlob, { contentType: 'image/png' });
-      if (sigError) throw new Error(`Error Firma: ${sigError.message}`);
+      const res = await fetch("/api/guardar-firma", { method: "POST", body: form });
+      const json = await res.json();
 
-      // 4. Guardar en tabla clientes (UPDATE por rut con el mismo formato que tiene en la BD)
-      const { data: frontUrlData } = supabase.storage.from("firmas").getPublicUrl(frontalPath);
-      const { data: backUrlData } = supabase.storage.from("firmas").getPublicUrl(traseroPath);
-      const { data: firmaUrlData } = supabase.storage.from("firmas").getPublicUrl(firmaPath);
-
-      const { error: dbError } = await supabase
-        .from("clientes")
-        .update({
-          ci_frontal: frontUrlData.publicUrl,
-          ci_trasero: backUrlData.publicUrl,
-          firma: firmaUrlData.publicUrl,
-          autorizacion,
-          link_firma_vendedor: vendedor,
-        })
-        .eq("rut", rut); // rut tiene el formato "18308221-3" que coincide con la BD
-
-      if (dbError) throw new Error("Error al guardar la firma en la base de datos.");
+      if (!res.ok || json.error) {
+        throw new Error(json.error || "Error al enviar los datos.");
+      }
 
       setSuccess(true);
     } catch (err: any) {
