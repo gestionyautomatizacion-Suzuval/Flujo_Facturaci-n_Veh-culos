@@ -258,16 +258,16 @@ CREATE TABLE IF NOT EXISTS public.mantencion_prepagada (
 ALTER TABLE public.mantencion_prepagada ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acceso a mantencion" ON public.mantencion_prepagada FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE TABLE IF NOT EXISTS public.negocios_comentarios (
+CREATE TABLE IF NOT EXISTS public.negocios_chat (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   pedido_venta text REFERENCES public.negocios(pedido_venta) ON DELETE CASCADE,
   usuario_nombre text,
   usuario_email text,
-  comentario text,
+  mensaje text,
   created_at timestamptz DEFAULT timezone('utc', now()) NOT NULL
 );
-ALTER TABLE public.negocios_comentarios ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Acceso a comentarios" ON public.negocios_comentarios FOR ALL TO authenticated USING (true) WITH CHECK (true);
+ALTER TABLE public.negocios_chat ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Acceso a chat" ON public.negocios_chat FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 CREATE TABLE IF NOT EXISTS public.negocios_validaciones (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -300,6 +300,7 @@ CREATE POLICY "Acceso a calculo_pc" ON public.calculo_pc FOR ALL TO authenticate
 CREATE TABLE IF NOT EXISTS public.cuadratura_valores_cliente (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   id_cuadratura bigint REFERENCES public.cuadraturas(id) ON DELETE CASCADE,
+  origen_z126 text,
   created_at timestamptz DEFAULT timezone('utc', now()) NOT NULL
 );
 ALTER TABLE public.cuadratura_valores_cliente ENABLE ROW LEVEL SECURITY;
@@ -438,5 +439,12 @@ BEGIN
     WHERE pubname = 'supabase_realtime' AND tablename = 'negocios_documentos'
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.negocios_documentos;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND tablename = 'negocios_chat'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.negocios_chat;
   END IF;
 END $$;

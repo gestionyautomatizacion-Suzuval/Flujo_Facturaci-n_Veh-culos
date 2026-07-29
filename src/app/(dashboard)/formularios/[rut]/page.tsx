@@ -75,6 +75,7 @@ interface CuadraturaData {
   impuesto_verde: number;
   dcto_suzuval_zqdv: number;
   aporte_marca_derco_z126: number;
+  origen_z126?: string | null;
   precio_final: number;
   saldo_pendiente: number;
   perfil_id?: string | null;
@@ -112,6 +113,7 @@ const EMPTY_FORM = {
   impuesto_verde: 0,
   dcto_suzuval_zqdv: 0,
   aporte_marca_derco_z126: 0,
+  origen_z126: "",
 };
 
 const EMPTY_MANT = { mantencion_10000: 0, mantencion_20000: 0, mantencion_30000: 0 };
@@ -389,9 +391,13 @@ export default function CuadraturaPage(props: { params: Promise<{ rut: string }>
       return;
     }
 
-    // Actualizar el id_cuadratura generado usando el ID
+    // Actualizar el id_cuadratura generado usando el ID y asignar numero_folio = id
+    // (numero_folio tiene UNIQUE constraint, usar NULL genera conflicto en registros múltiples del mismo cliente)
     const generatedId = `${1000 + data.id}_${cliente.rut}`;
-    await supabase.from("cuadratura_valores_cliente").update({ id_cuadratura: generatedId }).eq("id", data.id);
+    await supabase
+      .from("cuadratura_valores_cliente")
+      .update({ id_cuadratura: generatedId, numero_folio: data.id })
+      .eq("id", data.id);
 
 
 
@@ -492,6 +498,7 @@ export default function CuadraturaPage(props: { params: Promise<{ rut: string }>
             impuesto_verde:          existingData.impuesto_verde ?? 0,
             dcto_suzuval_zqdv:       existingData.dcto_suzuval_zqdv ?? 0,
             aporte_marca_derco_z126: existingData.aporte_marca_derco_z126 ?? 0,
+            origen_z126: existingData.origen_z126 ?? "",
           });
           setMant({
             mantencion_10000: existingData.mantencion_prepagada?.mantencion_10000 ?? 0,
@@ -742,7 +749,23 @@ export default function CuadraturaPage(props: { params: Promise<{ rut: string }>
                 </div>
                 <div className="flex-1 flex flex-col">
                   <NumFilaPct label="Descuentos Suzuval - ZQDV"   bruto={form.dcto_suzuval_zqdv}       pct={pctSuzuvalZqdv} onChange={v => handleChange("dcto_suzuval_zqdv", v)} />
-                  <NumFilaPct label="Aporte Marca Derco - Z126"   bruto={form.aporte_marca_derco_z126} pct={pctDercoZ126}   onChange={v => handleChange("aporte_marca_derco_z126", v)} last />
+                  <NumFilaPct label="Aporte Marca Derco - Z126"   bruto={form.aporte_marca_derco_z126} pct={pctDercoZ126}   onChange={v => handleChange("aporte_marca_derco_z126", v)} last={form.aporte_marca_derco_z126 === 0} />
+                  {form.aporte_marca_derco_z126 > 0 && (
+                    <div className="flex text-sm h-[34px] border-t border-slate-300">
+                      <div className="w-1/2 px-2 flex items-center justify-start border-r border-slate-300 font-medium text-xs bg-slate-50 text-blue-700">
+                        <span className="ml-4">↳ Especificar origen de Z126:</span>
+                      </div>
+                      <div className="w-1/2 bg-white flex items-center">
+                        <input
+                          type="text"
+                          className="w-full h-full px-3 text-sm bg-transparent focus:outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500"
+                          placeholder="Ej: Aprobación especial, campaña..."
+                          value={form.origen_z126 || ""}
+                          onChange={(e) => handleChange("origen_z126", e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1047,7 +1070,7 @@ function CuadraturaView({
                   { label: "Descuentos Suzuval - ZQDV", v: data.dcto_suzuval_zqdv },
                   { label: "Aporte Marca Derco - Z126",  v: data.aporte_marca_derco_z126 },
                 ].map((row, i) => (
-                  <div key={i} className={`flex text-sm h-[34px] ${i === 0 ? "border-b border-slate-300" : ""}`}>
+                  <div key={i} className={`flex text-sm h-[34px] ${i === 0 ? "border-b border-slate-300" : (data.origen_z126 ? "" : "")}`}>
                     <div className="w-1/2 px-2 flex items-center justify-between border-r border-slate-300 font-medium">
                       <span>{row.label}</span>
                       <span className="text-slate-400 font-mono text-xs">{formatPct(pctOf(row.v || 0))}</span>
@@ -1056,6 +1079,16 @@ function CuadraturaView({
                     <div className="w-1/4 flex items-center justify-center font-mono text-slate-600 bg-slate-50">{formatCLP(Math.round((row.v || 0) / 1.19))}</div>
                   </div>
                 ))}
+                {data.origen_z126 && (
+                  <div className="flex text-sm h-[34px] border-t border-slate-300">
+                    <div className="w-1/2 px-2 flex items-center justify-start border-r border-slate-300 font-medium text-xs bg-slate-50 text-blue-700">
+                      <span className="ml-4">↳ Origen Z126:</span>
+                    </div>
+                    <div className="w-1/2 flex items-center px-3 text-sm text-slate-700 bg-white">
+                      {data.origen_z126}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

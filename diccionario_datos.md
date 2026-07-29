@@ -63,7 +63,7 @@ Adicionalmente, el sistema cuenta con las siguientes tablas para sostener funcio
 - **`clientes`**: Almacena de forma centralizada la información e identidad de cada comprador (RUT como campo único, nombre, firma digital y URLs de cédulas de identidad).
 - **`cuadraturas`**: Tabla base referencial que amarra los datos financieros de una venta.
 - **`mantencion_prepagada`**: Vinculada a `cuadraturas`, registra los paquetes de mantención (10k, 20k, 30k) contratados por el cliente.
-- **`negocios_comentarios`**: Almacena el historial del chat interno y "Observaciones" (entre vendedores y área administrativa) propio de cada negocio.
+- **`negocios_chat`**: Almacena el historial del chat interno y "Observaciones" (entre vendedores y área administrativa) propio de cada negocio.
 - **`negocios_validaciones`**: Registra individualmente la aprobación o rechazo de elementos específicos por parte de Control de Ventas (ej. firma, documentos, datos financieros).
 - **`negocios_historial`**: Bitácora inmutable (Audit Trail) que guarda un registro cada vez que el negocio cambia de estado o ocurre un evento crítico de sistema.
 - **`calculo_pc`**, **`cuadratura_valores_cliente`** y **`cuadratura_pagos`**: Extensiones de la tabla base de cuadraturas que manejan el desglose del financiamiento, cobros, y cálculos relacionados.

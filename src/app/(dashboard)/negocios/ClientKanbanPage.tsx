@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/set-state-in-effect, @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -38,7 +38,9 @@ export default function ClientKanbanPage({ initialData, userRole = "VENDEDOR" }:
     if (stored) {
       try {
         setUnreadChats(new Set(JSON.parse(stored)));
-      } catch (e) {}
+      } catch (_e) {
+        // Ignorar error de parsing
+      }
     }
 
     const channel = supabase.channel('global-comentarios-kanban')
@@ -47,21 +49,19 @@ export default function ClientKanbanPage({ initialData, userRole = "VENDEDOR" }:
         { event: 'INSERT', schema: 'public', table: 'negocios_comentarios' }, 
         (payload) => {
           const newMsg = payload.new as any;
-          console.log("Nuevo comentario recibido en Kanban:", newMsg);
           
           if (!newMsg.comentario.startsWith("[AUDITORIA]|")) {
             setUnreadChats(prev => {
               const next = new Set(prev);
               next.add(newMsg.pedido_venta);
               localStorage.setItem("unread_negocios_chats", JSON.stringify(Array.from(next)));
-              console.log("Notificación activada para PV:", newMsg.pedido_venta);
               return next;
             });
           }
         }
       )
-      .subscribe((status) => {
-        console.log("Estado de suscripción Kanban global:", status);
+      .subscribe(() => {
+        // Suscrito
       });
 
     return () => {

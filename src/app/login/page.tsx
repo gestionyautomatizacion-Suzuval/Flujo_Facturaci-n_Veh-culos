@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unused-vars, react-hooks/set-state-in-effect */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
@@ -37,9 +37,13 @@ function LoginContent() {
 
       if (error) {
         setErrorMsg(error.message);
+        setLoading(false);
       }
-    } catch (err) {
-      setErrorMsg("Ocurrió un error inesperado al conectar con Supabase.");
+      // If success, it redirects, so we don't necessarily need to setLoading(false).
+    } catch (err: unknown) {
+      console.error("Error capturado en handleGoogleLogin:", err);
+      setErrorMsg(`Error: ${(err as Error)?.message || 'Error inesperado'}`);
+      setLoading(false);
     }
   };
 

@@ -132,9 +132,9 @@ export default function KanbanBoard({ initialData, isAdmin = false, canDelete = 
         alert("Ocurrió un error al mover la tarjeta en los servidores: " + error.message);
       } else {
         const { data: authData } = await supabase.auth.getUser();
-        await supabase.from('negocios_comentarios').insert([{
+        await supabase.from('negocios_chat').insert([{
           pedido_venta: draggableId,
-          comentario: `[AUDITORIA]|Estado del negocio cambiado: ${confirmAction.sourceTitle} -> ${confirmAction.destTitle}`,
+          mensaje: `[AUDITORIA]|Estado del negocio cambiado: ${confirmAction.sourceTitle} -> ${confirmAction.destTitle}`,
           usuario_email: authData?.user?.email || 'Sistema'
         }]);
         await supabase.from('negocios_historial').insert([{

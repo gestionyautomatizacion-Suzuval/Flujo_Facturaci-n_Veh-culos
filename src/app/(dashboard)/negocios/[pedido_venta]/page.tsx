@@ -9,8 +9,7 @@ export default async function NegocioPage({ params }: { params: Promise<{ pedido
   const pedido_venta = decodeURIComponent(raw_pedido_venta).trim();
   
   const { data: { user } } = await supabase.auth.getUser();
-  console.log("User:", user?.id);
-  console.log("pedido_venta type:", typeof pedido_venta, "value:", pedido_venta, "equals 333333333:", pedido_venta === '333333333');
+  // ignore unused user warning if necessary or just destructure
   
   const { data: negocio, error } = await supabase
     .from('negocios')
@@ -19,7 +18,7 @@ export default async function NegocioPage({ params }: { params: Promise<{ pedido
     .single();
 
   if (error) {
-    console.log("Error fetching negocio:", error);
+    console.error("Error fetching negocio:", error);
   }
 
   if (!negocio) {

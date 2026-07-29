@@ -119,7 +119,7 @@ Indicadores económicos para automatización de impuestos.
 *   `clientes`: Identidad, RUT centralizado, y referencias a documentos personales.
 *   `clientes_datos_negocios`: Datos específicos del comprador al momento de hacer el trato (dirección, comuna, giro).
 *   `cuadraturas` (y anexos `calculo_pc`, `cuadratura_valores_cliente`, `cuadratura_pagos`): Desglose del financiamiento, cobros, y cálculos relacionados a la venta.
-*   `negocios_comentarios`: Historial del chat interno entre vendedores y control.
+*   `negocios_chat`: Historial del chat interno entre vendedores y control.
 *   `negocios_validaciones`: Aprobaciones individuales de ciertos ítems.
 *   `negocios_historial`: Bitácora inmutable (Audit Trail) que guarda un registro ante cambios de estado críticos.
 

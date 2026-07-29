@@ -20,11 +20,27 @@ export default async function NegociosPage() {
   }
 
   // 2. Traer los negocios desde la Base de Datos, ordenados de más nuevos a más viejos.
-  //    Los ADMINISTRATIVOS solo ven negocios cuya Nota de Venta fue aprobada por jefatura.
-  const query = supabase
+  let query = supabase
     .from("negocios")
     .select("*")
     .order("created_at", { ascending: false });
+
+  if (userRole === "ADMINISTRATIVO") {
+    const { data: notaVentaDocs } = await supabase
+      .from("negocios_documentos")
+      .select("pedido_venta")
+      .or("tipo_documento.eq.NOTA_VENTA,nombre_archivo.ilike.%Nota de Venta%,nombre_archivo.ilike.%Nota_de_Venta%");
+
+    const pvsConNotaVenta = Array.from(
+      new Set(notaVentaDocs?.map((d) => d.pedido_venta).filter(Boolean) || [])
+    );
+
+    if (pvsConNotaVenta.length > 0) {
+      query = query.in("pedido_venta", pvsConNotaVenta);
+    } else {
+      query = query.in("pedido_venta", ["__SIN_RESULTADOS__"]);
+    }
+  }
 
   const { data: negocios, error } = await query;
 

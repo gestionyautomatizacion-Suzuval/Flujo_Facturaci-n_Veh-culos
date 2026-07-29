@@ -39,6 +39,7 @@ interface CuadraturaRow {
   saldo_pendiente: number;
   perfil_id: string | null;
   cliente_id: string | null;
+  origen_z126?: string | null;
 }
 
 interface INegocio {
@@ -416,6 +417,16 @@ export default function CuadraturaSection({ negocio, onCuadraturaLinked, renderV
                     <div className="w-1/4 flex items-center justify-center font-mono text-slate-600 bg-slate-50">{formatCLP(Math.round((row.v || 0) / 1.19))}</div>
                   </div>
                 ))}
+                {data.origen_z126 && (
+                  <div className="flex text-xs h-[30px] border-t border-slate-300">
+                    <div className="w-1/2 px-2 flex items-center justify-start border-r border-slate-300 font-medium bg-slate-50 text-blue-700">
+                      <span className="ml-4">↳ Origen Z126:</span>
+                    </div>
+                    <div className="w-1/2 flex items-center px-3 text-xs text-slate-700 bg-white">
+                      {data.origen_z126}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

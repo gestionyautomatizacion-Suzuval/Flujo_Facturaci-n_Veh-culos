@@ -14,11 +14,11 @@ import DatosClienteTab from "./DatosClienteTab";
 import { todasLasComunas, obtenerRegionPorComuna, regionesYcomunas } from "@/lib/chile";
 import Papa from "papaparse";
 
-interface Comentario {
+interface MensajeChat {
   id: string;
   usuario_nombre: string;
   usuario_email: string;
-  comentario: string;
+  mensaje: string;
   created_at: string;
 }
 
@@ -58,10 +58,10 @@ function mapTipo(tipo: string): string {
 export default function CarpetaClient({ negocio }: Props) {
   const router = useRouter();
   const [rightActiveTab, setRightActiveTab] = useState<"requeridos" | "cliente" | "archivos" | "firmados" | "historial">("requeridos");
-  const [comentarios, setComentarios] = useState<Comentario[]>([]);
+  const [chatMessages, setChatMessages] = useState<MensajeChat[]>([]);
   const [docs, setDocs] = useState<DocumentoInterno[]>([]);
   
-  const [nuevoComentario, setNuevoComentario] = useState("");
+  const [nuevoMensaje, setNuevoMensaje] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [sending, setSending] = useState(false);
@@ -188,13 +188,13 @@ export default function CarpetaClient({ negocio }: Props) {
 
     const initData = async () => {
       const resChats = await supabase
-        .from("negocios_comentarios")
+        .from("negocios_chat")
         .select("*")
         .eq("pedido_venta", negocio.pedido_venta)
         .order("created_at", { ascending: true });
         
       if (!resChats.error && resChats.data) {
-        setComentarios(resChats.data);
+        setChatMessages(resChats.data);
         setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
       }
       setLoading(false);
@@ -232,20 +232,20 @@ export default function CarpetaClient({ negocio }: Props) {
 
     initData();
 
-    const channel = supabase.channel(`comentarios-${negocio.pedido_venta}`)
+    const channel = supabase.channel(`chat-${negocio.pedido_venta}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
-          table: "negocios_comentarios",
+          table: "negocios_chat",
           filter: `pedido_venta=eq.${negocio.pedido_venta}`
         },
         (payload) => {
-          const newComentario = payload.new as Comentario;
-          setComentarios(prev => {
-            if (prev.some(c => c.id === newComentario.id)) return prev;
-            return [...prev, newComentario];
+          const newMsg = payload.new as MensajeChat;
+          setChatMessages(prev => {
+            if (prev.some(c => c.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
           });
           setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
         }
@@ -917,29 +917,32 @@ export default function CarpetaClient({ negocio }: Props) {
     router.replace("/negocios");
   };
 
-  const handleSendComentario = async (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nuevoComentario.trim()) return;
+    if (!nuevoMensaje.trim()) return;
 
     setSending(true);
     const nombreExtraido = userEmail.split("@")[0] || "Usuario";
 
-    const comentarioData = {
+    const mensajeData = {
       pedido_venta: negocio.pedido_venta,
       usuario_nombre: nombreExtraido,
       usuario_email: userEmail,
-      comentario: nuevoComentario.trim()
+      mensaje: nuevoMensaje.trim()
     };
 
     const { data, error } = await supabase
-      .from("negocios_comentarios")
-      .insert([comentarioData])
+      .from("negocios_chat")
+      .insert([mensajeData])
       .select()
       .single();
 
-    if (!error && data) {
-      setComentarios([...comentarios, data]);
-      setNuevoComentario("");
+    if (error) {
+      console.error("Error al enviar mensaje:", error);
+      alert("Error al enviar el mensaje: " + error.message);
+    } else if (data) {
+      setChatMessages([...chatMessages, data]);
+      setNuevoMensaje("");
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     }
     setSending(false);
@@ -1472,19 +1475,19 @@ export default function CarpetaClient({ negocio }: Props) {
                     <div className="flex justify-center py-6 text-slate-400">
                       <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
                     </div>
-                  ) : comentarios.filter(msg => !msg.comentario.startsWith("[AUDITORIA]|")).length === 0 ? (
+                  ) : chatMessages.filter(msg => !msg.mensaje.startsWith("[AUDITORIA]|")).length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full pt-10 text-slate-400 opacity-60">
                       <MessageSquare className="w-12 h-12 mb-3 text-slate-300" />
                       <p className="text-sm font-medium">Inicia la conversación en esta carpeta</p>
                     </div>
                   ) : (
-                    comentarios
-                      .filter(msg => !msg.comentario.startsWith("[AUDITORIA]|"))
+                    chatMessages
+                      .filter(msg => !msg.mensaje.startsWith("[AUDITORIA]|"))
                       .map((msg) => {
                         const esMio = msg.usuario_email === userEmail;
-                        const esAuditoria = msg.comentario.startsWith("[AUDITORIA]|");
+                        const esAuditoria = msg.mensaje.startsWith("[AUDITORIA]|");
                         
-                        let contentNode = msg.comentario;
+                        let contentNode = msg.mensaje;
 
                         return (
                           <div key={msg.id} className={`flex gap-3 ${esMio ? "justify-end" : "justify-start"}`}>
@@ -1508,17 +1511,17 @@ export default function CarpetaClient({ negocio }: Props) {
                 </div>
                 
                 <div className="p-4 bg-white border-t border-slate-200 shrink-0 shadow-[0_-2px_4px_rgba(0,0,0,0.02)]">
-                  <form onSubmit={handleSendComentario} className="flex gap-2 items-center">
+                  <form onSubmit={handleSendMessage} className="flex gap-2 items-center">
                     <input 
                       type="text" 
-                      value={nuevoComentario}
-                      onChange={(e) => setNuevoComentario(e.target.value)}
+                      value={nuevoMensaje}
+                      onChange={(e) => setNuevoMensaje(e.target.value)}
                       placeholder="Escribe un mensaje en la carpeta del negocio..." 
                       className="flex-1 rounded-full border border-slate-200 bg-slate-50 px-5 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white focus:border-transparent transition-all"
                     />
                     <button 
                       type="submit"
-                      disabled={sending || !nuevoComentario.trim()}
+                      disabled={sending || !nuevoMensaje.trim()}
                       className="flex shrink-0 items-center justify-center rounded-full bg-blue-600 text-white transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50 disabled:bg-slate-100 disabled:text-slate-400 font-bold p-3 shadow-md disabled:shadow-none"
                     >
                       <Send className="h-5 w-5" />

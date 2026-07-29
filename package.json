@@ -3,42 +3,47 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
-    "@supabase/ssr": "^0.10.2",
-    "@supabase/supabase-js": "^2.103.3",
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.111.0",
     "clsx": "^2.1.1",
-    "date-fns": "^4.1.0",
-    "lucide-react": "^1.8.0",
-    "next": "16.2.4",
-    "papaparse": "^5.5.3",
+    "date-fns": "^4.4.0",
+    "googleapis": "^173.0.0",
+    "lucide-react": "^1.27.0",
+    "next": "^15.3.9",
+    "package": "^1.0.1",
+    "papaparse": "^5.5.4",
     "pdf-lib": "^1.17.1",
-    "pdf-parse": "^1.1.1",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "pdf-parse": "^2.4.5",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "react-signature-canvas": "^1.1.0-alpha.2",
-    "tailwind-merge": "^3.5.0",
+    "tailwind-merge": "^3.6.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^26.1.2",
     "@types/papaparse": "^5.5.2",
     "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/react-signature-canvas": "^1.0.7",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.4",
+    "eslint": "^9.22.0",
+    "eslint-config-next": "^15.3.9",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5.4.5",
+    "typescript-eslint": "^8.65.0"
   },
   "overrides": {
-    "postcss": "^8.5.15"
+    "postcss": "^8.5.15",
+    "brace-expansion": "1.1.13",
+    "sharp": "^0.35.3"
   }
 }
