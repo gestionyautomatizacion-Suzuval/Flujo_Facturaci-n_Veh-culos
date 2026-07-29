@@ -43,6 +43,7 @@ function CapturaFirmaForm() {
     }
   };
 
+  // Formatea el RUT para mostrar en pantalla: "18308221-3"
   const formatRut = (value: string) => {
     const clean = value.replace(/[^0-9kK]/g, '').toUpperCase();
     if (clean.length <= 1) return clean;
@@ -51,6 +52,15 @@ function CapturaFirmaForm() {
     return `${body}-${dv}`;
   };
 
+  const validateRut = (rutStr: string) => {
+    const cleanRut = rutStr.replace(/[^0-9kK]/g, '').toUpperCase();
+    if (cleanRut.length < 8) return false;
+    return true;
+  };
+
+  // Llama al API route del servidor (con service_role) para buscar al cliente.
+  // Esto garantiza que la búsqueda funciona igual en navegadores con sesión
+  // y en smartphones sin sesión (link público), evitando bloqueos por RLS.
   const buscarNombreCliente = async (rutFormateado: string) => {
     if (!validateRut(rutFormateado)) {
       setNombreCliente(undefined as any);
@@ -59,30 +69,28 @@ function CapturaFirmaForm() {
     rutBusquedaRef.current = rutFormateado;
     setBuscandoCliente(true);
     setNombreCliente(undefined as any);
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("clientes")
-      .select("nombre, segundo_nombre, apellido, segundo_apellido")
-      .eq("rut", rutFormateado)
-      .maybeSingle();
-    // Evitar race condition: solo actualizar si este rut sigue siendo el actual
-    if (rutBusquedaRef.current !== rutFormateado) return;
-    if (data) {
-      const nombre = [data.nombre, data.segundo_nombre, data.apellido, data.segundo_apellido]
-        .filter(Boolean)
-        .join(" ");
-      setNombreCliente(nombre);
-    } else {
-      setNombreCliente(null);
-    }
-    setBuscandoCliente(false);
-  };
 
-  const validateRut = (rutStr: string) => {
-    const cleanRut = rutStr.replace(/[^0-9kK]/g, '').toUpperCase();
-    if (cleanRut.length < 8) return false;
-    // Basic formatting validation for this step
-    return true;
+    try {
+      const res = await fetch(`/api/buscar-cliente?rut=${encodeURIComponent(rutFormateado)}`);
+      const json = await res.json();
+
+      // Evitar race condition: solo actualizar si este rut sigue siendo el actual
+      if (rutBusquedaRef.current !== rutFormateado) return;
+
+      if (json.encontrado && json.nombre) {
+        setNombreCliente(json.nombre);
+      } else {
+        setNombreCliente(null);
+      }
+    } catch {
+      if (rutBusquedaRef.current === rutFormateado) {
+        setNombreCliente(null);
+      }
+    } finally {
+      if (rutBusquedaRef.current === rutFormateado) {
+        setBuscandoCliente(false);
+      }
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -116,16 +124,18 @@ function CapturaFirmaForm() {
 
     setSubmitting(true);
     const supabase = createClient();
+    // Extraemos solo los caracteres del RUT para el nombre de archivo
+    const rutSlug = rut.replace(/[^0-9kK]/g, '');
     try {
       // 1. Subir Foto Frontal
       const fExt = frontalFile.type.includes('png') ? 'png' : 'jpg';
-      const frontalPath = `capturas/${Date.now()}_front_${rut.replace(/[^0-9kK]/g, '')}.${fExt}`;
+      const frontalPath = `capturas/${Date.now()}_front_${rutSlug}.${fExt}`;
       const { error: fError } = await supabase.storage.from("firmas").upload(frontalPath, frontalFile);
       if (fError) throw new Error(`Error Frontal: ${fError.message}`);
 
       // 2. Subir Foto Trasera
       const tExt = traseroFile.type.includes('png') ? 'png' : 'jpg';
-      const traseroPath = `capturas/${Date.now()}_back_${rut.replace(/[^0-9kK]/g, '')}.${tExt}`;
+      const traseroPath = `capturas/${Date.now()}_back_${rutSlug}.${tExt}`;
       const { error: tError } = await supabase.storage.from("firmas").upload(traseroPath, traseroFile);
       if (tError) throw new Error(`Error Trasero: ${tError.message}`);
 
@@ -133,11 +143,11 @@ function CapturaFirmaForm() {
       const firmaDataUrl = sigCanvas.current.getTrimmedCanvas().toDataURL('image/png');
       const firmaRes = await fetch(firmaDataUrl);
       const firmaBlob = await firmaRes.blob();
-      const firmaPath = `capturas/${Date.now()}_firma_${rut.replace(/[^0-9kK]/g, '')}.png`;
+      const firmaPath = `capturas/${Date.now()}_firma_${rutSlug}.png`;
       const { error: sigError } = await supabase.storage.from("firmas").upload(firmaPath, firmaBlob, { contentType: 'image/png' });
       if (sigError) throw new Error(`Error Firma: ${sigError.message}`);
 
-      // 4. Guardar en tabla clientes (UPDATE por rut)
+      // 4. Guardar en tabla clientes (UPDATE por rut con el mismo formato que tiene en la BD)
       const { data: frontUrlData } = supabase.storage.from("firmas").getPublicUrl(frontalPath);
       const { data: backUrlData } = supabase.storage.from("firmas").getPublicUrl(traseroPath);
       const { data: firmaUrlData } = supabase.storage.from("firmas").getPublicUrl(firmaPath);
@@ -151,7 +161,7 @@ function CapturaFirmaForm() {
           autorizacion,
           link_firma_vendedor: vendedor,
         })
-        .eq("rut", rut);
+        .eq("rut", rut); // rut tiene el formato "18308221-3" que coincide con la BD
 
       if (dbError) throw new Error("Error al guardar la firma en la base de datos.");
 
