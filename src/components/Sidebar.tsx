@@ -47,7 +47,7 @@ export default function Sidebar() {
     { name: "Inicio", href: "/", icon: LayoutDashboard },
     { name: "Cuadratura de Valores", href: "/formularios", icon: CarFront },
     { name: "Pedidos de Ventas", href: "/negocios", icon: KanbanSquare },
-    { name: "Clientes / Firmas Digitales", href: "/firmas", icon: FileSignature },
+    { name: "Clientes / Firma Digital", href: "/firmas", icon: FileSignature },
   ];
 
   return (
