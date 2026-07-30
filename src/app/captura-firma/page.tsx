@@ -125,8 +125,9 @@ function CapturaFirmaForm() {
     try {
       // Convertir la firma a Blob usando canvas.toBlob() (compatible con todos los móviles).
       // fetch(dataUrl) NO es compatible con todos los navegadores móviles.
+      // Usamos getCanvas() en lugar de getTrimmedCanvas() porque trim-canvas falla en algunos dispositivos/Webpack.
       const firmaBlob: Blob = await new Promise((resolve, reject) => {
-        sigCanvas.current.getTrimmedCanvas().toBlob(
+        sigCanvas.current.getCanvas().toBlob(
           (blob: Blob | null) => {
             if (blob) resolve(blob);
             else reject(new Error("No se pudo obtener la imagen de la firma."));
