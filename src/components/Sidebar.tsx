@@ -69,7 +69,7 @@ export default function Sidebar() {
               <Link
                 key={item.name}
                 href={item.href}
-                className={`group relative flex items-center rounded-xl py-2.5 text-sm font-medium transition-all ${
+                className={`group relative flex items-center rounded-xl py-2.5 text-xs font-medium transition-all ${
                   isCollapsed ? 'justify-center px-0' : 'px-3'
                 } ${
                   isActive
@@ -96,7 +96,7 @@ export default function Sidebar() {
           <div className="p-4 border-t border-slate-200 bg-slate-50">
             <Link
               href="/settings"
-              className={`group flex items-center rounded-xl py-2.5 text-sm font-medium text-slate-600 transition-all hover:bg-slate-200 hover:text-slate-900 ${
+              className={`group flex items-center rounded-xl py-2.5 text-xs font-medium text-slate-600 transition-all hover:bg-slate-200 hover:text-slate-900 ${
                 isCollapsed ? 'justify-center px-0' : 'px-3'
               }`}
               title={isCollapsed ? "Configuración" : undefined}
