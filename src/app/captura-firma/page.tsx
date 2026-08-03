@@ -176,7 +176,7 @@ function CapturaFirmaForm() {
     <div className="min-h-screen bg-slate-100 py-8 px-4 md:px-0">
       <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
         <div className="bg-blue-600 p-6 text-center">
-          <h1 className="text-xl font-bold text-white">Firma Digital</h1>
+          <h1 className="text-xl font-bold text-white">Firma Digital Simple</h1>
           <p className="text-blue-100 text-sm mt-1">Suzuval Spa</p>
         </div>
 
@@ -238,7 +238,7 @@ function CapturaFirmaForm() {
 
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-slate-700 border-b border-slate-200 pb-2">Fotografías del Carnet</h3>
-            
+
             <div>
               <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors relative overflow-hidden group">
                 <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFileChange(e, setFrontalFile)} />
@@ -260,10 +260,10 @@ function CapturaFirmaForm() {
               <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors relative overflow-hidden group">
                 <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFileChange(e, setTraseroFile)} />
                 {traseroFile ? (
-                   <div className="absolute inset-0 bg-emerald-50 flex items-center justify-center flex-col text-emerald-700 border-emerald-300 border-2 rounded-xl">
-                   <CheckCircle className="w-8 h-8 mb-1" />
-                   <span className="font-semibold text-sm">Trasero Capturado</span>
-                 </div>
+                  <div className="absolute inset-0 bg-emerald-50 flex items-center justify-center flex-col text-emerald-700 border-emerald-300 border-2 rounded-xl">
+                    <CheckCircle className="w-8 h-8 mb-1" />
+                    <span className="font-semibold text-sm">Trasero Capturado</span>
+                  </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center pt-5 pb-6 text-slate-500 group-hover:text-blue-600 transition-colors">
                     <Camera className="w-8 h-8 mb-2" />
@@ -276,10 +276,10 @@ function CapturaFirmaForm() {
 
           <div>
             <div className="flex items-center justify-between mb-2">
-               <label className="block text-sm font-semibold text-slate-700">Firma Digital</label>
-               <button type="button" onClick={clearSignature} className="text-xs text-blue-600 font-medium flex items-center gap-1 hover:text-blue-800">
-                 <RefreshCcw className="w-3.5 h-3.5" /> Limpiar
-               </button>
+              <label className="block text-sm font-semibold text-slate-700">Firma Digital Simple</label>
+              <button type="button" onClick={clearSignature} className="text-xs text-blue-600 font-medium flex items-center gap-1 hover:text-blue-800">
+                <RefreshCcw className="w-3.5 h-3.5" /> Limpiar
+              </button>
             </div>
             <div className="border-2 border-slate-300 rounded-xl bg-white overflow-hidden touch-none h-48 w-full cursor-crosshair">
               {mounted && (
@@ -301,7 +301,7 @@ function CapturaFirmaForm() {
               className="mt-1 w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
             />
             <span className="text-xs text-slate-600 leading-relaxed">
-              Autorizo expresamente a Suzuval SPA a utilizar mi Cédula de Identidad y Firma Digital para los trámites legales y de facturación del vehículo.
+              Autorizo expresamente a Suzuval SPA a utilizar mi Cédula de Identidad y Firma Digital Simple para los trámites legales y de facturación del vehículo.
             </span>
           </label>
 
@@ -316,7 +316,7 @@ function CapturaFirmaForm() {
                 Procesando envío...
               </>
             ) : (
-              "Registrar Firma Digital"
+              "Registrar Firma Digital Simple"
             )}
           </button>
         </form>

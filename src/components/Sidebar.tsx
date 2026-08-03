@@ -13,7 +13,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  FileSignature
+  FileSignature,
+  BookOpen
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -48,6 +49,7 @@ export default function Sidebar() {
     { name: "Cuadratura de Valores", href: "/formularios", icon: CarFront },
     { name: "Pedidos de Ventas", href: "/negocios", icon: KanbanSquare },
     { name: "Clientes / Firma Digital", href: "/firmas", icon: FileSignature },
+    { name: "Guía del Usuario", href: "/guia-usuario", icon: BookOpen },
   ];
 
   return (

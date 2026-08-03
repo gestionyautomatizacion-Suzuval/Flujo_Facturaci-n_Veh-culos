@@ -448,3 +448,79 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.negocios_chat;
   END IF;
 END $$;
+
+-- ============================================================
+-- 6. GUÍAS DEL USUARIO — CATEGORÍAS
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.guias_categorias (
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  nombre      text        NOT NULL,
+  orden       integer     NOT NULL DEFAULT 0,
+  created_at  timestamptz DEFAULT timezone('utc', now()) NOT NULL
+);
+
+ALTER TABLE public.guias_categorias ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Auth leer guias_categorias"      ON public.guias_categorias;
+DROP POLICY IF EXISTS "Admin modificar guias_categorias" ON public.guias_categorias;
+
+CREATE POLICY "Auth leer guias_categorias"
+ON public.guias_categorias FOR SELECT TO authenticated
+USING (true);
+
+CREATE POLICY "Admin modificar guias_categorias"
+ON public.guias_categorias FOR ALL TO authenticated
+USING  (public.get_user_rol() = 'ADMIN')
+WITH CHECK (public.get_user_rol() = 'ADMIN');
+
+-- ============================================================
+-- 6b. GUÍAS DEL USUARIO — MANUALES PDF
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.guias_usuario (
+  id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  titulo       text        NOT NULL,
+  descripcion  text,
+  url_pdf      text        NOT NULL,
+  categoria_id uuid        REFERENCES public.guias_categorias(id) ON DELETE SET NULL,
+  orden        integer     NOT NULL DEFAULT 0,
+  created_at   timestamptz DEFAULT timezone('utc', now()) NOT NULL,
+  updated_at   timestamptz DEFAULT timezone('utc', now()) NOT NULL,
+  created_by   uuid        REFERENCES auth.users(id) ON DELETE SET NULL
+);
+
+-- Añadir columnas a tabla existente (idempotente)
+ALTER TABLE public.guias_usuario
+  ADD COLUMN IF NOT EXISTS categoria_id uuid REFERENCES public.guias_categorias(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS orden integer NOT NULL DEFAULT 0;
+
+ALTER TABLE public.guias_usuario ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Auth leer guias_usuario"      ON public.guias_usuario;
+DROP POLICY IF EXISTS "Admin modificar guias_usuario" ON public.guias_usuario;
+
+CREATE POLICY "Auth leer guias_usuario"
+ON public.guias_usuario FOR SELECT TO authenticated
+USING (true);
+
+CREATE POLICY "Admin modificar guias_usuario"
+ON public.guias_usuario FOR ALL TO authenticated
+USING  (public.get_user_rol() = 'ADMIN')
+WITH CHECK (public.get_user_rol() = 'ADMIN');
+
+-- Bucket para guias_usuario (privado)
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('guias_usuario', 'guias_usuario', false)
+ON CONFLICT (id) DO NOTHING;
+
+DROP POLICY IF EXISTS "Lectura autenticada de guias" ON storage.objects;
+DROP POLICY IF EXISTS "Modificacion admin de guias"  ON storage.objects;
+
+CREATE POLICY "Lectura autenticada de guias"
+ON storage.objects FOR SELECT TO authenticated
+USING (bucket_id = 'guias_usuario');
+
+CREATE POLICY "Modificacion admin de guias"
+ON storage.objects FOR ALL TO authenticated
+USING  (bucket_id = 'guias_usuario' AND public.get_user_rol() = 'ADMIN')
+WITH CHECK (bucket_id = 'guias_usuario' AND public.get_user_rol() = 'ADMIN');
+
