@@ -36,6 +36,34 @@ function CapturaFirmaForm() {
     sigCanvas.current?.clear();
   };
 
+  // Comprime una imagen al máximo de 1200px y calidad 0.75 (JPEG).
+  // Soluciona el error 413 / "Request Entity Too Large" en Android,
+  // donde las fotos de cámara pueden pesar 5–10 MB.
+  const comprimirImagen = (file: File, maxPx = 1200, quality = 0.75): Promise<Blob> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("No se pudo comprimir la imagen."));
+          },
+          "image/jpeg",
+          quality
+        );
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("No se pudo leer la imagen.")); };
+      img.src = url;
+    });
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, setFile: React.Dispatch<React.SetStateAction<File | null>>) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
@@ -136,18 +164,39 @@ function CapturaFirmaForm() {
         );
       });
 
+      // Comprimir imágenes del carnet antes de enviar.
+      // En Android, las fotos de cámara pueden pesar 5–10 MB y superar
+      // el límite de 4.5 MB de Vercel, causando error 413 ("Request Entity
+      // Too Large") que llega como texto HTML en vez de JSON.
+      const frontalComprimido = await comprimirImagen(frontalFile!);
+      const traseroComprimido = await comprimirImagen(traseroFile!);
+
       // Enviar todo al API route del servidor (service_role bypasea RLS)
       // Esto garantiza que funciona en móviles sin sesión activa.
       const form = new FormData();
       form.append("rut", rut);
       form.append("vendedor", vendedor);
       form.append("autorizacion", String(autorizacion));
-      form.append("frontal", frontalFile);
-      form.append("trasero", traseroFile);
+      form.append("frontal", frontalComprimido, "frontal.jpg");
+      form.append("trasero", traseroComprimido, "trasero.jpg");
       form.append("firma", firmaBlob, "firma.png");
 
       const res = await fetch("/api/guardar-firma", { method: "POST", body: form });
-      const json = await res.json();
+
+      // Parse seguro: si el servidor devuelve HTML (ej. error 413 de Vercel)
+      // en vez de JSON, mostramos un mensaje legible en vez de crashear.
+      const text = await res.text();
+      let json: { error?: string; success?: boolean } = {};
+      try {
+        json = JSON.parse(text);
+      } catch {
+        // La respuesta no es JSON (ej. "Request Entity Too Large")
+        throw new Error(
+          res.status === 413
+            ? "Las imágenes son demasiado grandes. Por favor reintenta con fotos de menor tamaño."
+            : `Error del servidor (${res.status}). Por favor reintenta.`
+        );
+      }
 
       if (!res.ok || json.error) {
         throw new Error(json.error || "Error al enviar los datos.");

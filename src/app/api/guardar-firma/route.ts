@@ -29,21 +29,21 @@ export async function POST(request: Request) {
     const ts = Date.now();
 
     // 1. Subir Foto Frontal
-    const fExt = frontalFile.type.includes("png") ? "png" : "jpg";
+    const fExt = frontalFile.type === "image/png" ? "png" : "jpg";
     const frontalPath = `capturas/${ts}_front_${rutSlug}.${fExt}`;
     const frontalBuffer = Buffer.from(await frontalFile.arrayBuffer());
     const { error: fError } = await supabase.storage
       .from("firmas")
-      .upload(frontalPath, frontalBuffer, { contentType: frontalFile.type, upsert: true });
+      .upload(frontalPath, frontalBuffer, { contentType: frontalFile.type || "image/jpeg", upsert: true });
     if (fError) throw new Error(`Error Frontal: ${fError.message}`);
 
     // 2. Subir Foto Trasera
-    const tExt = traseroFile.type.includes("png") ? "png" : "jpg";
+    const tExt = traseroFile.type === "image/png" ? "png" : "jpg";
     const traseroPath = `capturas/${ts}_back_${rutSlug}.${tExt}`;
     const traseroBuffer = Buffer.from(await traseroFile.arrayBuffer());
     const { error: tError } = await supabase.storage
       .from("firmas")
-      .upload(traseroPath, traseroBuffer, { contentType: traseroFile.type, upsert: true });
+      .upload(traseroPath, traseroBuffer, { contentType: traseroFile.type || "image/jpeg", upsert: true });
     if (tError) throw new Error(`Error Trasero: ${tError.message}`);
 
     // 3. Subir Firma Digital
